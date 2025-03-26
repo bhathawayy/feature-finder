@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field
+from dataclasses import (dataclass, field)
 
 import numpy as np
 
-from detection_settings import DefaultDetection
+from detection_methods import DefaultSettings
 
 
 @dataclass
@@ -59,7 +59,7 @@ class DetectionInfo:
     crop_size_wh: tuple[int] = field(default_factory=lambda: (0, 0))
     debug_image: np.ndarray = field(default_factory=lambda: np.array([]))
     pois: dict[int, POIInfo] = field(default_factory=lambda: {})
-    settings: DefaultDetection = field(default_factory=DefaultDetection)
+    settings: DefaultSettings = field(default_factory=DefaultSettings)
 
 
 @dataclass

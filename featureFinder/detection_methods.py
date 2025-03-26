@@ -11,7 +11,25 @@ from detection_settings import *
 from processing_support import *
 
 
-# Parent Class ------------------------------------------------------------------------------------------------------ #
+# Parent Classes ---------------------------------------------------------------------------------------------------- #
+class DefaultSettings:
+    """
+    Default detection settings. Note, the area or size parameters can typically be estimated using ImageJ. Fit a
+    shape to your feature then "Measure" to return the area in pxl^2.
+
+    USE THE HELPER GUI TO CONFIGURE!
+    """
+    # Parameters used for detection algorithms
+    blob_size: tuple = (1000, 6000)  # Expected size of fiducial [(pxl^2, pxl^2)]
+    circularity_min: float = 0.8  # The closer to 1, the more "perfect" the circle is
+    deviation_cutoff: int = 100  # Cutoff distance between multiple detections [pxl]
+    feature_size: tuple = (10000, 30000)  # Expected size of feature (non-fiducial) [(pxl^2, pxl^2)]
+    gauss: int = 11  # Gaussian blur kernel size
+    hough_min_length: int = 30  # Expected length of detected (CRH) line [pxl]
+    threshold: int = 30  # Explicit edge thresholding
+    range_slider_max: int = 100000
+
+
 class DetectionBase(ImageLoader):
     """
     Base class for image detection, extending the functionality of ImageLoader.
@@ -33,7 +51,7 @@ class DetectionBase(ImageLoader):
         self._crop: bool = False  # Crop raw image to speed up processing
         self._cropped_by: tuple = (0, 0)  # Width then height [pxl]
         self._detection_info: DetectionInfo = DetectionInfo()
-        self._detection_settings: DefaultDetection = DefaultDetection()
+        self._detection_settings: DefaultSettings = DefaultSettings()
         self._detection_settings_name: str = "DefaultDetection"
         self._do_compare: bool = False
         self._image_in_progress: str = ""
