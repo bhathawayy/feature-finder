@@ -1,7 +1,10 @@
+PySide6
 circle-fit
 gitpython
 matplotlib
 opencv-contrib-python
+pygetwindow
+qtrangeslider
 scikit-image
 scikit-learn
 scipy
