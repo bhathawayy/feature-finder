@@ -1,14 +1,13 @@
 import abc
 
 import numpy as np
+from MountOlympus.Processing.helper import (convert_color_bit, interpolate_array, find_outliers)
+from MountOlympus.__init__ import *
 from matplotlib import pyplot
 from pyml.pyml import (Mat, RoiLevel)
 from scipy.integrate import simpson
 from scipy.signal.windows import hann
 from sklearn.cluster import KMeans
-
-from MountOlympus.Processing.helper import (convert_color_bit, interpolate_array, find_outliers)
-from MountOlympus.__init__ import *
 
 
 # Parent Class ------------------------------------------------------------------------------------------------------ #
