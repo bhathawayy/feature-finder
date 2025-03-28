@@ -8,35 +8,32 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
-                            QMetaObject, QObject, QPoint, QRect,
-                            QSize, QTime, QUrl, Qt)
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
-                           QFont, QFontDatabase, QGradient, QIcon,
-                           QImage, QKeySequence, QLinearGradient, QPainter,
-                           QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QCheckBox, QDoubleSpinBox, QFrame,
+from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect,
+                            QSize, Qt)
+from PySide6.QtGui import (QFont)
+from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFrame,
                                QGraphicsView, QGridLayout, QHBoxLayout, QLabel,
                                QLayout, QPushButton, QSizePolicy, QSlider,
                                QSpinBox, QTextEdit, QWidget)
 
 
 class Ui_FeatureFinder(object):
-    def setupUi(self, FeatureFinder):
-        if not FeatureFinder.objectName():
-            FeatureFinder.setObjectName(u"FeatureFinder")
-        FeatureFinder.resize(961, 431)
-        sizePolicy = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+
+    def setup_ui(self, app):
+        if not app.objectName():
+            app.setObjectName(u"FeatureFinder")
+        app.resize(961, 431)
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(FeatureFinder.sizePolicy().hasHeightForWidth())
-        FeatureFinder.setSizePolicy(sizePolicy)
-        FeatureFinder.setMinimumSize(QSize(961, 431))
-        self.gridLayout_2 = QGridLayout(FeatureFinder)
+        sizePolicy.setHeightForWidth(app.sizePolicy().hasHeightForWidth())
+        app.setSizePolicy(sizePolicy)
+        app.setMinimumSize(QSize(961, 431))
+        self.gridLayout_2 = QGridLayout(app)
         self.gridLayout_2.setObjectName(u"gridLayout_2")
-        self.stream_window = QGraphicsView(FeatureFinder)
+        self.stream_window = QGraphicsView(app)
         self.stream_window.setObjectName(u"stream_window")
-        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         sizePolicy1.setHorizontalStretch(0)
         sizePolicy1.setVerticalStretch(0)
         sizePolicy1.setHeightForWidth(self.stream_window.sizePolicy().hasHeightForWidth())
@@ -46,25 +43,23 @@ class Ui_FeatureFinder(object):
 
         self.gridLayout_2.addWidget(self.stream_window, 0, 2, 1, 1)
 
-        self.frame = QFrame(FeatureFinder)
+        self.frame = QFrame(app)
         self.frame.setObjectName(u"frame")
-        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        sizePolicy2.setHorizontalStretch(0)
-        sizePolicy2.setVerticalStretch(0)
-        sizePolicy2.setHeightForWidth(self.frame.sizePolicy().hasHeightForWidth())
-        self.frame.setSizePolicy(sizePolicy2)
+        sizePolicy1.setHeightForWidth(self.frame.sizePolicy().hasHeightForWidth())
+        self.frame.setSizePolicy(sizePolicy1)
         self.frame.setMinimumSize(QSize(466, 413))
-        self.frame.setMaximumSize(QSize(466, 413))
+        self.frame.setMaximumSize(QSize(16777215, 16777215))
+        self.frame.setAutoFillBackground(True)
         self.frame.setFrameShape(QFrame.Shape.NoFrame)
         self.frame.setFrameShadow(QFrame.Shadow.Raised)
         self.image_paths_header = QLabel(self.frame)
         self.image_paths_header.setObjectName(u"image_paths_header")
         self.image_paths_header.setGeometry(QRect(10, 10, 441, 24))
-        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        sizePolicy3.setHorizontalStretch(0)
-        sizePolicy3.setVerticalStretch(0)
-        sizePolicy3.setHeightForWidth(self.image_paths_header.sizePolicy().hasHeightForWidth())
-        self.image_paths_header.setSizePolicy(sizePolicy3)
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.image_paths_header.sizePolicy().hasHeightForWidth())
+        self.image_paths_header.setSizePolicy(sizePolicy2)
         font = QFont()
         font.setPointSize(11)
         font.setBold(True)
@@ -79,13 +74,15 @@ class Ui_FeatureFinder(object):
         self.file_path_entry = QTextEdit(self.frame)
         self.file_path_entry.setObjectName(u"file_path_entry")
         self.file_path_entry.setGeometry(QRect(120, 40, 241, 41))
-        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        sizePolicy4.setHorizontalStretch(0)
-        sizePolicy4.setVerticalStretch(0)
-        sizePolicy4.setHeightForWidth(self.file_path_entry.sizePolicy().hasHeightForWidth())
-        self.file_path_entry.setSizePolicy(sizePolicy4)
-        self.file_path_entry.setFrameShape(QFrame.Shape.Box)
+        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        sizePolicy3.setHorizontalStretch(0)
+        sizePolicy3.setVerticalStretch(0)
+        sizePolicy3.setHeightForWidth(self.file_path_entry.sizePolicy().hasHeightForWidth())
+        self.file_path_entry.setSizePolicy(sizePolicy3)
+        self.file_path_entry.setFrameShape(QFrame.Shape.StyledPanel)
         self.file_path_entry.setFrameShadow(QFrame.Shadow.Plain)
+        self.file_path_entry.setLineWidth(1)
+        self.file_path_entry.setMidLineWidth(0)
         self.file_path_entry.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.file_path_entry.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.file_path_entry.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
@@ -98,16 +95,16 @@ class Ui_FeatureFinder(object):
         self.detection_controls_header = QLabel(self.frame)
         self.detection_controls_header.setObjectName(u"detection_controls_header")
         self.detection_controls_header.setGeometry(QRect(10, 140, 441, 24))
-        sizePolicy3.setHeightForWidth(self.detection_controls_header.sizePolicy().hasHeightForWidth())
-        self.detection_controls_header.setSizePolicy(sizePolicy3)
+        sizePolicy2.setHeightForWidth(self.detection_controls_header.sizePolicy().hasHeightForWidth())
+        self.detection_controls_header.setSizePolicy(sizePolicy2)
         self.detection_controls_header.setFont(font)
         self.detection_controls_header.setAlignment(
             Qt.AlignmentFlag.AlignLeading | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.gauss_blur_spin = QSpinBox(self.frame)
         self.gauss_blur_spin.setObjectName(u"gauss_blur_spin")
         self.gauss_blur_spin.setGeometry(QRect(370, 230, 81, 24))
-        self.gauss_blur_spin.setAutoFillBackground(True)
-        self.gauss_blur_spin.setFrame(False)
+        self.gauss_blur_spin.setAutoFillBackground(False)
+        self.gauss_blur_spin.setFrame(True)
         self.gauss_blur_spin.setMaximum(500)
         self.gauss_blur_spin.setSingleStep(1)
         self.gauss_blur_slider = QSlider(self.frame)
@@ -128,8 +125,8 @@ class Ui_FeatureFinder(object):
         self.threshold_spin = QSpinBox(self.frame)
         self.threshold_spin.setObjectName(u"threshold_spin")
         self.threshold_spin.setGeometry(QRect(370, 200, 81, 24))
-        self.threshold_spin.setAutoFillBackground(True)
-        self.threshold_spin.setFrame(False)
+        self.threshold_spin.setAutoFillBackground(False)
+        self.threshold_spin.setFrame(True)
         self.threshold_spin.setMaximum(255)
         self.threshold_spin.setSingleStep(1)
         self.threshold_label = QLabel(self.frame)
@@ -175,8 +172,8 @@ class Ui_FeatureFinder(object):
         self.circularity_spin.setObjectName(u"circularity_spin")
         self.circularity_spin.setEnabled(True)
         self.circularity_spin.setGeometry(QRect(370, 330, 81, 24))
-        self.circularity_spin.setAutoFillBackground(True)
-        self.circularity_spin.setFrame(False)
+        self.circularity_spin.setAutoFillBackground(False)
+        self.circularity_spin.setFrame(True)
         self.circularity_spin.setMinimum(0.100000000000000)
         self.circularity_spin.setMaximum(1.000000000000000)
         self.circularity_spin.setSingleStep(0.100000000000000)
@@ -200,8 +197,8 @@ class Ui_FeatureFinder(object):
         self.detection_controls_header_2 = QLabel(self.frame)
         self.detection_controls_header_2.setObjectName(u"detection_controls_header_2")
         self.detection_controls_header_2.setGeometry(QRect(10, 300, 441, 24))
-        sizePolicy3.setHeightForWidth(self.detection_controls_header_2.sizePolicy().hasHeightForWidth())
-        self.detection_controls_header_2.setSizePolicy(sizePolicy3)
+        sizePolicy2.setHeightForWidth(self.detection_controls_header_2.sizePolicy().hasHeightForWidth())
+        self.detection_controls_header_2.setSizePolicy(sizePolicy2)
         font1 = QFont()
         font1.setPointSize(9)
         font1.setBold(False)
@@ -243,14 +240,12 @@ class Ui_FeatureFinder(object):
 
         self.gridLayout_2.addWidget(self.frame, 0, 3, 1, 1)
 
-        self.retranslateUi(FeatureFinder)
+        self.translate_ui(app)
 
-        QMetaObject.connectSlotsByName(FeatureFinder)
+        QMetaObject.connectSlotsByName(app)
 
-    # setupUi
-
-    def retranslateUi(self, FeatureFinder):
-        FeatureFinder.setWindowTitle(QCoreApplication.translate("FeatureFinder", u"FeatureFinder", None))
+    def translate_ui(self, app):
+        app.setWindowTitle(QCoreApplication.translate("FeatureFinder", u"FeatureFinder", None))
         self.image_paths_header.setText(QCoreApplication.translate("FeatureFinder", u"Image Import/Export", None))
         self.file_path_label.setText(QCoreApplication.translate("FeatureFinder", u"Input File Path:", None))
         # if QT_CONFIG(tooltip)
@@ -320,4 +315,3 @@ class Ui_FeatureFinder(object):
         self.blob_size_min.setText(QCoreApplication.translate("FeatureFinder", u"0", None))
         self.blob_size_max.setText(QCoreApplication.translate("FeatureFinder", u"0", None))
         self.file_path_label_2.setText(QCoreApplication.translate("FeatureFinder", u"Export drawing:", None))
-    # retranslateUi
