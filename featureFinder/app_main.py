@@ -1,46 +1,56 @@
-import os.path
-import sys
-import pygetwindow as gw
-
 import ctypes
-import cv2
 import logging
 import math
+import os.path
+import sys
+from copy import deepcopy
+
+import cv2
 import numpy as np
+import pygetwindow as gw
 import winsound
-
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QWidget, QStyleFactory, QHBoxLayout, QFileDialog
-from qtrangeslider import QRangeSlider
-from PySide6.QtCore import (QRectF, QSize, Slot)
+from PySide6.QtCore import (QRectF, QSize, Slot, QSignalBlocker, Qt)
 from PySide6.QtGui import (QImage, QPainter)
-from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy)
-from featureFinder.processing_support import convert_color_bit
-from detection_methods import DefaultSettings
+from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
+                               QHBoxLayout, QFileDialog)
+from qtrangeslider import QRangeSlider
 
-from app_ui import Ui_FeatureFinder
+from featureFinder.app_ui import Ui_FeatureFinder
+from featureFinder.detection_methods import (DetectionBase, SFRDetection, CHDetection, DefaultSettings)
+from featureFinder.processing_support import (convert_color_bit, check_path)
 
 
 class FeatureFinder(QWidget):
+    """
+    Main widget for the Feature Finder application.
+    """
 
     def __init__(self, parent=None):
+        """
+        Initialize the FeatureFinder widget.
+
+        :param parent: Parent widget
+        """
         super().__init__(parent)
         self.ui = Ui_FeatureFinder()
-        self.ui.setupUi(self)
+        self.ui.setup_ui(self)
 
         # Define class variables
         self._display: Display = Display(self)
         self._logger: logging.Logger = logging.getLogger(__name__)
+        self._raw_image: np.ndarray = np.array([])
         self.detection_settings: DefaultSettings = DefaultSettings()
+        self.detector: DetectionBase | None = None
         self.drawn_image: np.ndarray = np.array([])
-        self.rgb8_image: np.ndarray = np.array([])
 
         # Startup routines for GUI
         self._startup()
 
     def _add_logger(self):
-        os.path.dirname(__file__)
-        logger_path = os.path.join(os.path.dirname(__file__), "feature_finder_log.log")
+        """
+        Add a file handler to the logger.
+        """
+        logger_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "feature_finder_log.log")
         if os.path.exists(logger_path):
             os.remove(logger_path)
         file_handler = logging.FileHandler(logger_path)
@@ -51,40 +61,139 @@ class FeatureFinder(QWidget):
         self._logger.addHandler(file_handler)
 
     def _attach_functions_to_widgets(self):
-        # Detection method checkbox
-        self.ui.crosshair_detection_check.clicked.connect(self._change_detection_method)
-
-        # Gaussian blur controls
-        self.ui.gauss_blur_slider.sliderReleased.connect(self._update_image)
-        self.ui.gauss_blur_slider.valueChanged.connect(self._change_gauss_blur_slider)
-        self.ui.gauss_blur_spin.lineEdit().returnPressed.connect(self._change_gauss_blur_spin)
-
-        # Pixel threshold controls
-        self.ui.threshold_slider.sliderReleased.connect(self._update_image)
-        self.ui.threshold_slider.valueChanged.connect(self._change_threshold_slider)
-        self.ui.threshold_spin.lineEdit().returnPressed.connect(self._change_threshold_spin)
-
-        # Circularity controls
+        """
+        Attach functions to various widgets in the UI.
+        """
+        # Single sliders
         self.ui.circularity_slider.sliderReleased.connect(self._update_image)
         self.ui.circularity_slider.valueChanged.connect(self._change_circularity_slider)
-        self.ui.circularity_spin.lineEdit().returnPressed.connect(self._change_circularity_spin)
 
-        # Blob size range slider
+        self.ui.gauss_blur_slider.sliderReleased.connect(self._update_image)
+        self.ui.gauss_blur_slider.valueChanged.connect(self._change_gauss_blur_slider)
+
+        self.ui.threshold_slider.sliderReleased.connect(self._update_image)
+        self.ui.threshold_slider.valueChanged.connect(self._change_threshold_slider)
+
+        # Spin boxes
+        self.ui.circularity_spin.lineEdit().returnPressed.connect(self._change_circularity_spin)
+        self.ui.gauss_blur_spin.lineEdit().returnPressed.connect(self._change_gauss_blur_spin)
+        self.ui.threshold_spin.lineEdit().returnPressed.connect(self._change_threshold_spin)
+
+        # Range sliders
         blob_size_range_slider = self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0]
         blob_size_range_slider.sliderReleased.connect(self._update_image)
         blob_size_range_slider.valueChanged.connect(self._change_blob_size_range)
 
-        # Feature size range slider
         feature_size_range_slider = self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0]
         feature_size_range_slider.sliderReleased.connect(self._update_image)
         feature_size_range_slider.valueChanged.connect(self._change_feature_size_range)
 
-        # File browser
+        # Buttons / Check boxes
+        self.ui.crosshair_detection_check.clicked.connect(self._change_detection_method)
         self.ui.file_path_browse_button.clicked.connect(self._click_browse_file)
+        self.ui.save_image_button.clicked.connect(self._click_save_drawing)
 
-    def _click_browse_file(self, ):
+    def _change_feature_size_range(self):
+        """
+        Update the feature size range labels and image.
+        """
+        new_val = self.feature_size_range
+        self.ui.feature_size_min.setText(str(new_val[0]))
+        self.ui.feature_size_max.setText(str(new_val[1]))
+        self._update_image()
+
+    def _change_blob_size_range(self):
+        """
+        Update the blob size range labels and image.
+        """
+        new_val = self.blob_size_range
+        self.ui.blob_size_min.setText(str(new_val[0]))
+        self.ui.blob_size_max.setText(str(new_val[1]))
+        self._update_image()
+
+    def _change_gauss_blur_slider(self):
+        """
+        Update the Gaussian blur spin box value and image when the slider changes.
+        """
+        new_val = self.ui.gauss_blur_slider.value()
+        with QSignalBlocker(self.ui.gauss_blur_spin):
+            self.ui.gauss_blur_spin.setValue(new_val)
+        self._update_image()
+
+    def _change_gauss_blur_spin(self):
+        """
+        Update the Gaussian blur slider value when the spin box changes.
+        """
+        self.ui.gauss_blur_slider.setValue(self.gauss_blur)
+
+    def _change_threshold_slider(self):
+        """
+        Update the threshold spin box value and image when the slider changes.
+        """
+        new_val = self.ui.threshold_slider.value()
+        with QSignalBlocker(self.ui.threshold_spin):
+            self.ui.threshold_spin.setValue(new_val)
+        self._update_image()
+
+    def _change_threshold_spin(self):
+        """
+        Update the threshold slider value when the spin box changes.
+        """
+        self.ui.threshold_slider.setValue(self.threshold)
+
+    def _change_circularity_slider(self):
+        """
+        Update the circularity spin box value and image when the slider changes.
+        """
+        new_val = self.ui.circularity_slider.value()
+        with QSignalBlocker(self.ui.circularity_spin):
+            self.ui.circularity_spin.setValue(new_val / 100)
+        self._update_image()
+
+    def _change_circularity_spin(self):
+        """
+        Update the circularity slider value when the spin box changes.
+        """
+        self.ui.circularity_slider.setValue(self.circularity)
+
+    def _change_detection_method(self):
+        """
+        Change the detection method and update the UI accordingly.
+        """
+        # Update blob size labels
+        low_val = int(min(self.detection_settings.blob_size) * self.range_size_factor)
+        high_val = int(max(self.detection_settings.blob_size) * self.range_size_factor)
+        self.ui.blob_size_min.setText(str(low_val))
+        self.ui.blob_size_max.setText(str(high_val))
+
+        # Update feature size labels
+        low_val = int(min(self.detection_settings.feature_size) * self.range_size_factor)
+        high_val = int(max(self.detection_settings.feature_size) * self.range_size_factor)
+        self.ui.feature_size_min.setText(str(low_val))
+        self.ui.feature_size_max.setText(str(high_val))
+
+        # Define detector type
+        if self._raw_image.size > 0:
+            if self.rect_detection_status:
+                self.detector = SFRDetection(self._raw_image)
+            else:
+                self.detector = CHDetection(self._raw_image)
+
+        # Update drawing
+        self._update_image()
+
+    def _click_browse_file(self):
+        """
+        Open a file dialog to browse and select an image file.
+        """
 
         def import_image(file_path: str) -> np.ndarray:
+            """
+            Import an image file and convert it to an RGB8 numpy array.
+
+            :param file_path: Path to the image file
+            :return: Numpy array containing the image data
+            """
             if os.path.isfile(file_path):
                 raw_array = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
                 rgb8_image = convert_color_bit(raw_array, color_channels=3, out_bit_depth=8)
@@ -103,69 +212,67 @@ class FeatureFinder(QWidget):
             selected_file = file_dialog.selectedFiles()[0]
             image_array = import_image(selected_file)
             if image_array.size > 0:
-                # Set the entry box to the valid image path
+                # Set the entry box to the valid image path and log
                 self.ui.file_path_entry.setText(selected_file)
+                self._logger.info(f"Imported image at: {selected_file}")
 
-                # Store array internally
-                self.rgb8_image = image_array
-                self.drawn_image = image_array.copy()
+                # Store the image array
+                self._raw_image = image_array
+                self.drawn_image = convert_color_bit(image_array, color_channels=3, out_bit_depth=8)
+
+                # Update range sliders
+                feature_size_slider = self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0]
+                feature_size_slider._maximum = self.range_slider_max * self.range_size_factor
+
+                blob_size_slider = self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0]
+                blob_size_slider._maximum = self.range_slider_max * self.range_size_factor
+
+                # Init the appropriate detector
+                if self.rect_detection_status:
+                    self.detector = SFRDetection(self._raw_image)
+                else:
+                    self.detector = CHDetection(self._raw_image)
 
                 # Update the stream window to show imported image
-                self._update_stream_window()
+                self._update_image()
             else:
                 self._dialog("Invalid file selected!\n\nPlease check the file path and integrity.", level=1)
+                self._logger.warning(f"Ignoring invalid image at {selected_file}")
 
-    def _change_feature_size_range(self):
-        new_val = self.feature_size_range
-        self.ui.feature_size_min.setText(str(new_val[0]))
-        self.ui.feature_size_max.setText(str(new_val[1]))
+    def _click_save_drawing(self):
+        """
+        Save the current drawn image to a file.
+        """
+        if self._raw_image.size > 0:
+            # Define file path
+            file_path = os.path.join(os.path.dirname(self.ui.file_path_entry.toPlainText()), "ff_drawing.png")
 
-    def _change_blob_size_range(self):
-        new_val = self.blob_size_range
-        self.ui.blob_size_min.setText(str(new_val[0]))
-        self.ui.blob_size_max.setText(str(new_val[1]))
+            # Attempt to save the image
+            if self.drawn_image.size > 0:
+                # Check the image path
+                checked_path = check_path(file_path)
 
-    def _change_gauss_blur_slider(self):
-        new_val = self.ui.gauss_blur_slider.value()
-        self.ui.gauss_blur_spin.setValue(new_val)
+                # Save the image with cv2
+                try:
+                    if not os.path.isdir(os.path.dirname(checked_path)):
+                        os.makedirs(os.path.dirname(checked_path))
+                    cv2.imwrite(checked_path, self.drawn_image)
+                except PermissionError:
+                    file_path = os.path.join(os.getcwd(), os.path.basename(file_path))
+                    self._logger.warning(f"Lacking write permissions for this directory. Saving locally instead.")
+                    cv2.imwrite(file_path, self.drawn_image)
 
-    def _change_gauss_blur_spin(self):
-        self.ui.gauss_blur_slider.setValue(self.gauss_blur)
-
-    def _change_threshold_slider(self):
-        new_val = self.ui.threshold_slider.value()
-        self.ui.threshold_spin.setValue(new_val)
-
-    def _change_threshold_spin(self):
-        self.ui.threshold_slider.setValue(self.threshold)
-
-    def _change_circularity_slider(self):
-        new_val = self.ui.circularity_slider.value()
-        self.ui.circularity_spin.setValue(new_val)
-
-    def _change_circularity_spin(self):
-        self.ui.circularity_slider.setValue(self.circularity)
-
-    def _change_detection_method(self):
-        blob_size_range_slider = self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0]
-        blob_size_range_slider._maximum = self.detection_settings.range_slider_max * self.range_size_factor
-        blob_size_range_slider._maximum = self.detection_settings.range_slider_max * self.range_size_factor
-        blob_size_range_slider.setValue((int(min(self.detection_settings.blob_size) * self.range_size_factor),
-                                         int(max(self.detection_settings.blob_size) * self.range_size_factor)))
-
-        feature_size_range_slider = self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0]
-        feature_size_range_slider._maximum = self.detection_settings.range_slider_max * self.range_size_factor
-        feature_size_range_slider._maximum = self.detection_settings.range_slider_max * self.range_size_factor
-        feature_size_range_slider.setValue((int(min(self.detection_settings.feature_size) * self.range_size_factor),
-                                            int(max(self.detection_settings.feature_size) * self.range_size_factor)))
+            # Log location of image
+            self._logger.info(f"Image saved at: {file_path}")
 
     def _dialog(self, message: str, button: hex = 0x0, level: int = 0) -> int:
         """
-        Initiate a dialog box to prompt or inform the user.
-        :param message: Message to display in the dialog box.
-        :param button: Options: 0x0 = OK, 0x01 = OK/CANCEL, 0x03 = YES/NO/CANCEL, 0x04 = YES/NO
-        :param level: Options: 0 = prompt, 1 = warning, 2 = error
-        :return: Answer from the user.
+        Display a dialog box with the given message.
+
+        :param message: Message to display in the dialog box
+        :param button: Button options (0x0 = OK, 0x01 = OK/CANCEL, 0x03 = YES/NO/CANCEL, 0x04 = YES/NO)
+        :param level: Dialog level (0 = prompt, 1 = warning, 2 = error)
+        :return: User's response to the dialog.
         """
         # Set local variables
         message = bytes(message, 'utf-8')
@@ -195,7 +302,27 @@ class FeatureFinder(QWidget):
 
         return dialog_answer
 
+    def _set_defaults(self):
+        """
+        Set default values for UI elements.
+        """
+        settings = self.detection_settings
+
+        self.ui.threshold_slider.setValue(settings.threshold)
+        self.ui.threshold_spin.setValue(settings.threshold)
+
+        self.ui.gauss_blur_slider.setValue(settings.gauss)
+        self.ui.gauss_blur_spin.setValue(settings.gauss)
+
+        self.ui.circularity_spin.setValue(settings.circularity_min)
+        self.ui.circularity_slider.setValue(settings.circularity_min * 100)
+
     def _setup_range_sliders(self, target_widget: QHBoxLayout):
+        """
+        Fill in the placeholders with the custom range sliders.
+
+        :param target_widget: Placeholder handles.
+        """
         # Define what default values to use
         if "blob" in target_widget.objectName().lower():
             defaults = self.detection_settings.blob_size
@@ -208,9 +335,9 @@ class FeatureFinder(QWidget):
 
         # Set parameters for target range slider
         range_slider = QRangeSlider()
-        range_slider.setOrientation(Qt.Horizontal)
+        range_slider.setOrientation(Qt.Orientation.Horizontal)
         range_slider._minimum = 0
-        range_slider._maximum = self.detection_settings.range_slider_max * self.range_size_factor
+        range_slider._maximum = self.range_slider_max * self.range_size_factor
         range_slider.setValue((low_val, high_val))
 
         # Add configured slider to the application
@@ -225,6 +352,9 @@ class FeatureFinder(QWidget):
             self.ui.feature_size_max.setText(str(high_val))
 
     def _startup(self):
+        """
+        Routines to run on startup of the GUI.
+        """
         # Init logger
         self._add_logger()
 
@@ -232,13 +362,55 @@ class FeatureFinder(QWidget):
         self._setup_range_sliders(self.ui.feature_size_range_slider)
         self._setup_range_sliders(self.ui.blob_size_range_slider)
 
+        # Set default values of widget
+        self._set_defaults()
+
         # Attach functionality
         self._attach_functions_to_widgets()
 
     def _update_image(self):
-        pass
+        """
+        Update the drawn image internally.
+        """
+        if self._raw_image.size > 0:
+            # Pre-process image
+            update_next = self.detector.apply_gauss_blur(self.gauss_blur, update=(self.gauss_blur !=
+                                                                                  self.detection_settings.gauss))
+            update_next = self.detector.apply_threshold(self.threshold, update=(update_next or self.threshold !=
+                                                                                self.detection_settings.threshold))
+            if not self.rect_detection_status:
+                self.detector.apply_hough_transform(self.threshold, self.feature_size_range[0],
+                                                    update=(update_next or self.threshold !=
+                                                            self.detection_settings.threshold or
+                                                            self.feature_size_range[0] !=
+                                                            self.detection_settings.feature_size[0]))
+
+            # Find and draw features/detections
+            self.drawn_image = self.detector.find_features_and_draw(self.blob_size_range, self.circularity,
+                                                                    self.feature_size_range)
+
+            # Update stored detection settings
+            self.detection_settings.blob_size = deepcopy(self.blob_size_range)
+            self.detection_settings.circularity_min = deepcopy(self.circularity)
+            self.detection_settings.feature_size = deepcopy(self.feature_size_range)
+            self.detection_settings.gauss = deepcopy(self.gauss_blur)
+            self.detection_settings.threshold = deepcopy(self.threshold)
+
+            # Log settings
+            self._logger.info(f"Updated image with settings:\n"
+                              f"   blob size = {self.detection_settings.blob_size}"
+                              f"   circularity = {self.detection_settings.circularity_min}"
+                              f"   feature size = {self.detection_settings.feature_size}"
+                              f"   gauss kernel = {self.detection_settings.gauss}"
+                              f"   threshold = {self.detection_settings.threshold}")
+
+            # Update stream window
+            self._update_stream_window()
 
     def _update_stream_window(self):
+        """
+        Update the stream window with the drawn image.
+        """
         if self.drawn_image.size > 0:
             s = self.drawn_image.shape
             q_image = QImage(self.drawn_image.tobytes(), s[1], s[0], 3 * s[1], QImage.Format.Format_RGB888)
@@ -246,18 +418,40 @@ class FeatureFinder(QWidget):
 
     @property
     def circularity(self) -> float:
+        """
+        Selected circularity limit for blob detection.
+
+        :return: Circularity limit.
+        """
         return float(self.ui.circularity_spin.value())
 
     @property
     def blob_size_range(self) -> tuple:
-        return self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0].value()
+        """
+        Selected range of detected blob sizes.
+
+        :return: Blob size range.
+        """
+        raw_range = self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0].value()
+        return tuple([i * self.range_size_factor for i in raw_range])
 
     @property
     def feature_size_range(self) -> tuple:
-        return self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0].value()
+        """
+        Selected range of detected feature (rectangles or crosshairs) sizes.
+
+        :return: Feature size range.
+        """
+        raw_range = self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0].value()
+        return tuple([i * self.range_size_factor for i in raw_range])
 
     @property
     def gauss_blur(self) -> int:
+        """
+        Selected gaussian blur kernel size.
+
+        :return: Gaussian blur kernel.
+        """
         # Get raw value from UI
         val = int(self.ui.gauss_blur_spin.value())
 
@@ -270,19 +464,48 @@ class FeatureFinder(QWidget):
         return val
 
     @property
+    def range_slider_max(self) -> int:
+        """
+        Slider range maximum based on image size.
+
+        :return: Slider range maximum.
+        """
+        if self._raw_image.size > 0:
+            s = self._raw_image.shape
+            return s[0] * s[1] * 2
+        else:
+            return 1000000
+
+    @property
     def range_size_factor(self) -> float:
-        if self.rect_detection_status:
+        """
+        Factor applied to size sliders based on detection method.
+
+        :return: Slider size factor.
+        """
+        if not self.rect_detection_status:
             size_factor = 1 / 100
         else:
             size_factor = 1.0
 
         return size_factor
 
+    @property
     def rect_detection_status(self) -> bool:
+        """
+        Flag for rect. detection method.
+
+        :return: Crosshair detection (false) or rectangle detection (true).
+        """
         return self.ui.crosshair_detection_check.isChecked()
 
     @property
     def threshold(self) -> int:
+        """
+        Selected pixel threshold value.
+
+        :return: Threshold value.
+        """
         return int(self.ui.threshold_spin.value())
 
 
@@ -296,11 +519,11 @@ class Display(QGraphicsView):
         super().__init__(parent)
 
         self.setObjectName(u"stream_window")
-        size_policy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        size_policy = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         size_policy.setHeightForWidth(self.sizePolicy().hasHeightForWidth())
         self.setSizePolicy(size_policy)
-        self.setMinimumSize(QSize(445, 450))
-        parent.ui.gridLayout.addWidget(self, 0, 0, 1, 1)
+        self.setMinimumSize(QSize(471, 411))
+        parent.ui.gridLayout_2.addWidget(self, 0, 2, 1, 1)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
 
         self.scene = CustomGraphicsScene(self)
@@ -403,9 +626,17 @@ class CustomGraphicsScene(QGraphicsScene):
         painter.drawImage(rect, self.image)
 
 
-if __name__ == "__main__":
+def launch_gui():
+    """
+    Main functionality. Launches GUI for feature detection.
+    :return:
+    """
     app = QApplication(sys.argv)
     app.setStyle(QStyleFactory.create("WindowsVista"))
     widget = FeatureFinder()
     widget.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    launch_gui()
