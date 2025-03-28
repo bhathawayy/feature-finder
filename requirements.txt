@@ -8,5 +8,6 @@ qtrangeslider
 scikit-image
 scikit-learn
 scipy
+setuptools
 
 numpy < 2.0.0
