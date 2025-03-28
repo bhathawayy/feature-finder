@@ -18,12 +18,12 @@ class DefaultSettings:
     USE THE HELPER GUI TO CONFIGURE!
     """
     # Parameters used for detection algorithms
-    blob_size: tuple = (1000, 6000)  # Expected size of fiducial [(pxl^2, pxl^2)]
+    blob_size: tuple = (0, 220000)  # Expected size of fiducial [(pxl^2, pxl^2)]
     circularity_min: float = 0.8  # The closer to 1, the more "perfect" the circle is
-    feature_size: tuple = (10000, 50000)  # Expected size of feature (non-fiducial) [(pxl^2, pxl^2)]
+    feature_size: tuple = (0, 700000)  # Expected size of feature (non-fiducial) [(pxl^2, pxl^2)]
     gauss: int = 21  # Gaussian blur kernel size
     range_slider_max: int = 100000  # max value of range sliders
-    threshold: int = 30  # Explicit edge thresholding
+    threshold: int = 84  # Explicit edge thresholding
 
 
 class DetectionBase(abc.ABC):
