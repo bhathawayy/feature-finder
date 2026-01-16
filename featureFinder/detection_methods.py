@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import abc
 
 import circle_fit
@@ -7,7 +5,7 @@ import cv2
 import numpy as np
 from scipy.signal import argrelmin
 
-from featureFinder.processing_support import (convert_color_bit, get_point_distance)
+from featureFinder.processing_support import convert_color_bit, get_point_distance
 
 
 class DefaultSettings:
