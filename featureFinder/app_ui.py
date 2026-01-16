@@ -8,13 +8,11 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect,
-                            QSize, Qt)
-from PySide6.QtGui import (QFont)
-from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFrame,
-                               QGraphicsView, QGridLayout, QHBoxLayout, QLabel,
-                               QLayout, QPushButton, QSizePolicy, QSlider,
-                               QSpinBox, QTextEdit, QWidget)
+from PySide6.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel,
+                               QLayout, QPushButton, QSizePolicy, QSlider, QSpinBox, QTextEdit, QWidget)
+
 
 
 class Ui_FeatureFinder(object):
