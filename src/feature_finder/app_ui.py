@@ -21,7 +21,7 @@ class Ui_FeatureFinder(object):
 
     def setup_ui(self, app):
         if not app.objectName():
-            app.setObjectName(u"FeatureFinder")
+            app.setObjectName(u"Feature Finder")
         app.resize(961, 431)
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         sizePolicy.setHorizontalStretch(0)
@@ -245,13 +245,13 @@ class Ui_FeatureFinder(object):
         QMetaObject.connectSlotsByName(app)
 
     def translate_ui(self, app):
-        app.setWindowTitle(QCoreApplication.translate("FeatureFinder", u"FeatureFinder", None))
-        self.image_paths_header.setText(QCoreApplication.translate("FeatureFinder", u"Image Import/Export", None))
-        self.file_path_label.setText(QCoreApplication.translate("FeatureFinder", u"Input File Path:", None))
+        app.setWindowTitle(QCoreApplication.translate("Feature Finder", u"Feature Finder", None))
+        self.image_paths_header.setText(QCoreApplication.translate("Feature Finder", u"Image Import/Export", None))
+        self.file_path_label.setText(QCoreApplication.translate("Feature Finder", u"Input File Path:", None))
         # if QT_CONFIG(tooltip)
-        self.file_path_entry.setToolTip(QCoreApplication.translate("FeatureFinder", u"Path to input file ", None))
+        self.file_path_entry.setToolTip(QCoreApplication.translate("Feature Finder", u"Path to input file ", None))
         # endif // QT_CONFIG(tooltip)
-        self.file_path_entry.setHtml(QCoreApplication.translate("FeatureFinder",
+        self.file_path_entry.setHtml(QCoreApplication.translate("Feature Finder",
                                                                 u"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
                                                                 "<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
                                                                 "p, li { white-space: pre-wrap; }\n"
@@ -263,55 +263,55 @@ class Ui_FeatureFinder(object):
                                                                 None))
         # if QT_CONFIG(tooltip)
         self.file_path_browse_button.setToolTip(
-            QCoreApplication.translate("FeatureFinder", u"Path browser for input file ", None))
+            QCoreApplication.translate("Feature Finder", u"Path browser for input file ", None))
         # endif // QT_CONFIG(tooltip)
-        self.file_path_browse_button.setText(QCoreApplication.translate("FeatureFinder", u"Browse...", None))
+        self.file_path_browse_button.setText(QCoreApplication.translate("Feature Finder", u"Browse...", None))
         # if QT_CONFIG(tooltip)
         self.save_image_button.setToolTip(
-            QCoreApplication.translate("FeatureFinder", u"Save the displayed image to provided path", None))
+            QCoreApplication.translate("Feature Finder", u"Save the displayed image to provided path", None))
         # endif // QT_CONFIG(tooltip)
-        self.save_image_button.setText(QCoreApplication.translate("FeatureFinder", u"Save to File...", None))
-        self.detection_controls_header.setText(QCoreApplication.translate("FeatureFinder", u"Detection Controls", None))
+        self.save_image_button.setText(QCoreApplication.translate("Feature Finder", u"Save to File...", None))
+        self.detection_controls_header.setText(QCoreApplication.translate("Feature Finder", u"Detection Controls", None))
         # if QT_CONFIG(tooltip)
-        self.gauss_blur_spin.setToolTip(QCoreApplication.translate("FeatureFinder", u"Gaussian blur kernel size", None))
+        self.gauss_blur_spin.setToolTip(QCoreApplication.translate("Feature Finder", u"Gaussian blur kernel size", None))
         # endif // QT_CONFIG(tooltip)
         # if QT_CONFIG(tooltip)
         self.gauss_blur_slider.setToolTip(
-            QCoreApplication.translate("FeatureFinder", u"Gaussian blur kernel size", None))
+            QCoreApplication.translate("Feature Finder", u"Gaussian blur kernel size", None))
         # endif // QT_CONFIG(tooltip)
-        self.gauss_blur_label.setText(QCoreApplication.translate("FeatureFinder", u"Gaussian Blur:", None))
+        self.gauss_blur_label.setText(QCoreApplication.translate("Feature Finder", u"Gaussian Blur:", None))
         # if QT_CONFIG(tooltip)
         self.threshold_spin.setToolTip(
-            QCoreApplication.translate("FeatureFinder", u"Threshold value for edge detection", None))
+            QCoreApplication.translate("Feature Finder", u"Threshold value for edge detection", None))
         # endif // QT_CONFIG(tooltip)
-        self.threshold_label.setText(QCoreApplication.translate("FeatureFinder", u"Pixel Threshold:", None))
+        self.threshold_label.setText(QCoreApplication.translate("Feature Finder", u"Pixel Threshold:", None))
         # if QT_CONFIG(tooltip)
         self.threshold_slider.setToolTip(
-            QCoreApplication.translate("FeatureFinder", u"Threshold value for edge detection", None))
+            QCoreApplication.translate("Feature Finder", u"Threshold value for edge detection", None))
         # endif // QT_CONFIG(tooltip)
-        self.feature_size_label.setText(QCoreApplication.translate("FeatureFinder", u"Size Range:", None))
+        self.feature_size_label.setText(QCoreApplication.translate("Feature Finder", u"Size Range:", None))
         # if QT_CONFIG(tooltip)
         self.circularity_slider.setToolTip(
-            QCoreApplication.translate("FeatureFinder", u"The closer to 1, the more \"perfect\" the circle is", None))
+            QCoreApplication.translate("Feature Finder", u"The closer to 1, the more \"perfect\" the circle is", None))
         # endif // QT_CONFIG(tooltip)
         # if QT_CONFIG(tooltip)
-        self.crosshair_detection_check.setToolTip(QCoreApplication.translate("FeatureFinder",
+        self.crosshair_detection_check.setToolTip(QCoreApplication.translate("Feature Finder",
                                                                              u"Turning OFF rect. detection will toggle ON crosshair detection",
                                                                              None))
         # endif // QT_CONFIG(tooltip)
         self.crosshair_detection_check.setText(
-            QCoreApplication.translate("FeatureFinder", u"On / Off (Crosshair Detection)", None))
+            QCoreApplication.translate("Feature Finder", u"On / Off (Crosshair Detection)", None))
         # if QT_CONFIG(tooltip)
         self.circularity_spin.setToolTip(
-            QCoreApplication.translate("FeatureFinder", u"The closer to 1, the more \"perfect\" the circle is", None))
+            QCoreApplication.translate("Feature Finder", u"The closer to 1, the more \"perfect\" the circle is", None))
         # endif // QT_CONFIG(tooltip)
-        self.circularity_label.setText(QCoreApplication.translate("FeatureFinder", u"Circularity:", None))
-        self.blob_size_label.setText(QCoreApplication.translate("FeatureFinder", u"Size Range:", None))
+        self.circularity_label.setText(QCoreApplication.translate("Feature Finder", u"Circularity:", None))
+        self.blob_size_label.setText(QCoreApplication.translate("Feature Finder", u"Size Range:", None))
         self.detection_controls_header_2.setText(
-            QCoreApplication.translate("FeatureFinder", u"Blob-Specific Controls...", None))
-        self.rect_detection_label.setText(QCoreApplication.translate("FeatureFinder", u"Rect. Detection:", None))
-        self.feature_size_min.setText(QCoreApplication.translate("FeatureFinder", u"0", None))
-        self.feature_size_max.setText(QCoreApplication.translate("FeatureFinder", u"0", None))
-        self.blob_size_min.setText(QCoreApplication.translate("FeatureFinder", u"0", None))
-        self.blob_size_max.setText(QCoreApplication.translate("FeatureFinder", u"0", None))
-        self.file_path_label_2.setText(QCoreApplication.translate("FeatureFinder", u"Export drawing:", None))
+            QCoreApplication.translate("Feature Finder", u"Blob-Specific Controls...", None))
+        self.rect_detection_label.setText(QCoreApplication.translate("Feature Finder", u"Rect. Detection:", None))
+        self.feature_size_min.setText(QCoreApplication.translate("Feature Finder", u"0", None))
+        self.feature_size_max.setText(QCoreApplication.translate("Feature Finder", u"0", None))
+        self.blob_size_min.setText(QCoreApplication.translate("Feature Finder", u"0", None))
+        self.blob_size_max.setText(QCoreApplication.translate("Feature Finder", u"0", None))
+        self.file_path_label_2.setText(QCoreApplication.translate("Feature Finder", u"Export drawing:", None))

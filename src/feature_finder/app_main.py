@@ -15,9 +15,15 @@ from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QAppl
                                QHBoxLayout, QFileDialog)
 from qtrangeslider import QRangeSlider
 
+<<<<<<< Updated upstream:featureFinder/app_main.py
 from featureFinder.app_ui import Ui_FeatureFinder
 from featureFinder.detection_methods import (DetectionBase, SFRDetection, CHDetection, DefaultSettings)
 from featureFinder.processing_support import (convert_color_bit, check_path)
+=======
+from feature_finder.app_ui import Ui_FeatureFinder
+from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection, DefaultSettings
+from feature_finder.processing_support import convert_color_bit, check_path
+>>>>>>> Stashed changes:src/feature_finder/app_main.py
 
 
 class FeatureFinder(QWidget):
@@ -27,7 +33,7 @@ class FeatureFinder(QWidget):
 
     def __init__(self, parent=None):
         """
-        Initialize the FeatureFinder widget.
+        Initialize the Feature Finder widget.
 
         :param parent: Parent widget
         """

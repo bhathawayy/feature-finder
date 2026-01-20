@@ -7,7 +7,11 @@ import cv2
 import numpy as np
 from scipy.signal import argrelmin
 
+<<<<<<< Updated upstream:featureFinder/detection_methods.py
 from featureFinder.processing_support import (convert_color_bit, get_point_distance)
+=======
+from feature_finder.processing_support import convert_color_bit, get_point_distance
+>>>>>>> Stashed changes:src/feature_finder/detection_methods.py
 
 
 class DefaultSettings:
