@@ -1,13 +1,8 @@
-PySide6
-circle-fit
-gitpython
-matplotlib
-opencv-contrib-python
+circle_fit
+numpy
+opencv-python
 pygetwindow
-qtrangeslider
-scikit-image
-scikit-learn
+pynput
+pyside6
+qtrangeslider @ git+https://github.com/bhathawayy/QtRangeSlider.git
 scipy
-setuptools
-
-numpy < 2.0.0

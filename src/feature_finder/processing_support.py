@@ -1,7 +1,8 @@
+import os
+import warnings
+
 import cv2
 import numpy as np
-
-from featureFinder.__init__ import *
 
 
 def check_path(target_path: str, overwrite: bool = True) -> str:

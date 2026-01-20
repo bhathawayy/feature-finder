@@ -1,7 +1,7 @@
 import ctypes
 import logging
 import math
-import os.path
+import os
 import sys
 from copy import deepcopy
 
@@ -9,31 +9,25 @@ import cv2
 import numpy as np
 import pygetwindow as gw
 import winsound
-from PySide6.QtCore import (QRectF, QSize, Slot, QSignalBlocker, Qt)
-from PySide6.QtGui import (QImage, QPainter)
+from PySide6.QtCore import QRectF, QSize, Slot, QSignalBlocker, Qt
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
                                QHBoxLayout, QFileDialog)
 from qtrangeslider import QRangeSlider
 
-<<<<<<< Updated upstream:featureFinder/app_main.py
-from featureFinder.app_ui import Ui_FeatureFinder
-from featureFinder.detection_methods import (DetectionBase, SFRDetection, CHDetection, DefaultSettings)
-from featureFinder.processing_support import (convert_color_bit, check_path)
-=======
 from feature_finder.app_ui import Ui_FeatureFinder
 from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection, DefaultSettings
 from feature_finder.processing_support import convert_color_bit, check_path
->>>>>>> Stashed changes:src/feature_finder/app_main.py
 
 
 class FeatureFinder(QWidget):
     """
-    Main widget for the Feature Finder application.
+    Main widget for the feature-finder application.
     """
 
     def __init__(self, parent=None):
         """
-        Initialize the Feature Finder widget.
+        Initialize the feature-finder widget.
 
         :param parent: Parent widget
         """
@@ -56,9 +50,10 @@ class FeatureFinder(QWidget):
         """
         Add a file handler to the logger.
         """
-        logger_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "feature_finder_log.log")
+        logger_path = os.path.join(os.path.dirname(__file__), "resources", "feature_finder_log.log")
         if os.path.exists(logger_path):
             os.remove(logger_path)
+        os.makedirs(os.path.dirname(logger_path), exist_ok=True)
         file_handler = logging.FileHandler(logger_path)
         file_handler.setLevel(logging.INFO)
         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s",
