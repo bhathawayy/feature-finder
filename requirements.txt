@@ -4,5 +4,4 @@ opencv-python
 pygetwindow
 pynput
 pyside6
-qtrangeslider @ git+https://github.com/bhathawayy/QtRangeSlider.git
 scipy
