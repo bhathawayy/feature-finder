@@ -14,9 +14,9 @@ from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
                                QFileDialog)
 
-from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection, DefaultSettings
+from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection
 from feature_finder.interface.ui_form import Ui_featureFinder
-from feature_finder.processing_support import convert_color_bit, check_path
+from feature_finder.processing_support import convert_color_bit, check_path, DefaultSettings
 
 
 class FeatureFinder(QWidget):
@@ -378,19 +378,27 @@ class FeatureFinder(QWidget):
             if self.drawn_image.size > 0:
                 # Check the image path
                 checked_path = check_path(file_path)
+                checked_dir = os.path.dirname(checked_path)
 
                 # Save the image with cv2
                 try:
-                    if not os.path.isdir(os.path.dirname(checked_path)):
-                        os.makedirs(os.path.dirname(checked_path))
+                    if not os.path.isdir(checked_dir):
+                        os.makedirs(checked_dir)
                     cv2.imwrite(checked_path, self.drawn_image)
                 except PermissionError:
+                    checked_dir = os.getcwd()
                     file_path = os.path.join(os.getcwd(), os.path.basename(file_path))
                     self._logger.warning(f"Lacking write permissions for this directory. Saving locally instead.")
                     cv2.imwrite(file_path, self.drawn_image)
+                finally:
+                    self._logger.info(f"Image saved at: {file_path}")
 
-            # Log location of image
-            self._logger.info(f"Image saved at: {file_path}")
+                # Save YAML files
+                self.detection_settings.to_yaml(os.path.join(checked_dir, "detection_settings.yaml"))
+                for f, feature in enumerate(self.detector.found_features):
+                    write_mode = "w" if f == 0 else "a"
+                    feature.to_yaml(os.path.join(checked_dir, "found_features.yaml"), write_mode=write_mode)
+                self._logger.info(f"YAML files saved to: {file_path}")
 
     def _dialog(self, message: str, button: hex = 0x0, level: int = 0) -> int:
         """
@@ -480,8 +488,8 @@ class FeatureFinder(QWidget):
                                                             self.detection_settings.feature_size[0]))
 
             # Find and draw features/detections
-            self.drawn_image = self.detector.find_features_and_draw(self.blob_size_range, self.circularity,
-                                                                    self.feature_size_range)
+            self.detector.detect_features(self.feature_size_range, self.blob_size_range, self.circularity)
+            self.drawn_image = self.detector.display_image
 
             # Update stored detection settings
             self.detection_settings.blob_size = deepcopy(self.blob_size_range)
@@ -524,7 +532,7 @@ class FeatureFinder(QWidget):
         return float(self.ui.circularity_spin.value())
 
     @property
-    def blob_size_range(self) -> tuple:
+    def blob_size_range(self) -> tuple[float, float]:
         """
         Selected range of detected blob sizes.
 
@@ -536,7 +544,7 @@ class FeatureFinder(QWidget):
         return min_size * self.range_size_factor, max_size * self.range_size_factor
 
     @property
-    def feature_size_range(self) -> tuple:
+    def feature_size_range(self) -> tuple[float, float]:
         """
         Selected range of detected feature (rectangles or crosshairs) sizes.
 
@@ -747,7 +755,7 @@ def launch_gui():
     :return:
     """
     app = QApplication(sys.argv)
-    app.setStyle(QStyleFactory.create("WindowsVista"))
+    app.setStyle(QStyleFactory.create("fusion"))
     widget = FeatureFinder()
     widget.show()
     sys.exit(app.exec())

@@ -3,5 +3,7 @@ numpy
 opencv-python
 pygetwindow
 pynput
+pydantic
 pyside6
 scipy
+pyyaml
