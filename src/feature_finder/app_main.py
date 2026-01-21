@@ -13,9 +13,8 @@ from PySide6.QtCore import QRectF, QSize, Slot, QSignalBlocker, Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
                                QHBoxLayout, QFileDialog)
-from qtrangeslider import QRangeSlider
 
-from feature_finder.interface.ui_form import Ui_FeatureFinder
+from feature_finder.interface.ui_form import Ui_featureFinder
 from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection, DefaultSettings
 from feature_finder.processing_support import convert_color_bit, check_path
 
@@ -32,7 +31,7 @@ class FeatureFinder(QWidget):
         :param parent: Parent widget
         """
         super().__init__(parent)
-        self.ui = Ui_FeatureFinder()
+        self.ui = Ui_featureFinder()
         self.ui.setupUi(self)
 
         # Define class variables
