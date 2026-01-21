@@ -1,0 +1,30 @@
+[project]
+name = "feature_finder"
+authors = [
+    {name = "Brooke Hathaway"}
+]
+version = "1.1.0"
+requires-python = ">=3.12"
+
+dynamic = ["dependencies"]
+readme = "README.md"
+
+[project.urls]
+repository = "https://github.com/bhathawayy/feature-finder.git"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["feature_finder", "feature_finder.*"]
+
+[tool.setuptools.data-files]
+"feature_finder_resources" = ["interface/*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

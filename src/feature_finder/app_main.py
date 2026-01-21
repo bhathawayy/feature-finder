@@ -9,31 +9,30 @@ import cv2
 import numpy as np
 import pygetwindow as gw
 import winsound
-from PySide6.QtCore import QRectF, QSize, Slot, QSignalBlocker, Qt
+from PySide6.QtCore import QRectF, Slot, QSignalBlocker
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
-                               QHBoxLayout, QFileDialog)
-from qtrangeslider import QRangeSlider
+                               QFileDialog)
 
-from featureFinder.app_ui import Ui_FeatureFinder
-from featureFinder.detection_methods import DetectionBase, SFRDetection, CHDetection, DefaultSettings
-from featureFinder.processing_support import convert_color_bit, check_path
+from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection
+from feature_finder.interface.ui_form import Ui_featureFinder
+from feature_finder.processing_support import convert_color_bit, check_path, DefaultSettings
 
 
 class FeatureFinder(QWidget):
     """
-    Main widget for the Feature Finder application.
+    Main widget for the feature-finder application.
     """
 
     def __init__(self, parent=None):
         """
-        Initialize the FeatureFinder widget.
+        Initialize the feature-finder widget.
 
         :param parent: Parent widget
         """
         super().__init__(parent)
-        self.ui = Ui_FeatureFinder()
-        self.ui.setup_ui(self)
+        self.ui = Ui_featureFinder()
+        self.ui.setupUi(self)
 
         # Define class variables
         self._display: Display = Display(self)
@@ -49,6 +48,8 @@ class FeatureFinder(QWidget):
     def _add_logger(self):
         """
         Add a file handler to the logger.
+        
+        :return: None
         """
         logger_path = os.path.join(os.path.dirname(__file__), "resources", "feature_finder_log.log")
         if os.path.exists(logger_path):
@@ -64,57 +65,153 @@ class FeatureFinder(QWidget):
     def _attach_functions_to_widgets(self):
         """
         Attach functions to various widgets in the UI.
+        
+        :return: None
         """
-        # Single sliders
+        # Sliders
+        self.ui.blob_max_size_slider.sliderReleased.connect(self._update_image)
+        self.ui.blob_max_size_slider.valueChanged.connect(self._change_blob_size_slider)
+        self.ui.blob_min_size_slider.sliderReleased.connect(self._update_image)
+        self.ui.blob_min_size_slider.valueChanged.connect(lambda: self._change_blob_size_slider(False))
         self.ui.circularity_slider.sliderReleased.connect(self._update_image)
         self.ui.circularity_slider.valueChanged.connect(self._change_circularity_slider)
-
+        self.ui.feature_max_size_slider.sliderReleased.connect(self._update_image)
+        self.ui.feature_max_size_slider.valueChanged.connect(self._change_feature_size_slider)
+        self.ui.feature_min_size_slider.sliderReleased.connect(self._update_image)
+        self.ui.feature_min_size_slider.valueChanged.connect(lambda: self._change_feature_size_slider(False))
         self.ui.gauss_blur_slider.sliderReleased.connect(self._update_image)
         self.ui.gauss_blur_slider.valueChanged.connect(self._change_gauss_blur_slider)
-
-        self.ui.threshold_slider.sliderReleased.connect(self._update_image)
-        self.ui.threshold_slider.valueChanged.connect(self._change_threshold_slider)
+        self.ui.hough_threshold_slider.sliderReleased.connect(self._update_image)
+        self.ui.hough_threshold_slider.valueChanged.connect(self._change_hough_threshold_slider)
+        self.ui.pixel_threshold_slider.sliderReleased.connect(self._update_image)
+        self.ui.pixel_threshold_slider.valueChanged.connect(self._change_pixel_threshold_slider)
 
         # Spin boxes
+        self.ui.blob_max_size_spin.lineEdit().returnPressed.connect(self._change_blob_size_spin)
+        self.ui.blob_min_size_spin.lineEdit().returnPressed.connect(lambda: self._change_blob_size_spin(False))
         self.ui.circularity_spin.lineEdit().returnPressed.connect(self._change_circularity_spin)
+        self.ui.feature_max_size_spin.lineEdit().returnPressed.connect(self._change_feature_size_spin)
+        self.ui.feature_min_size_spin.lineEdit().returnPressed.connect(lambda: self._change_feature_size_spin(False))
         self.ui.gauss_blur_spin.lineEdit().returnPressed.connect(self._change_gauss_blur_spin)
-        self.ui.threshold_spin.lineEdit().returnPressed.connect(self._change_threshold_spin)
-
-        # Range sliders
-        blob_size_range_slider = self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0]
-        blob_size_range_slider.sliderReleased.connect(self._update_image)
-        blob_size_range_slider.valueChanged.connect(self._change_blob_size_range)
-
-        feature_size_range_slider = self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0]
-        feature_size_range_slider.sliderReleased.connect(self._update_image)
-        feature_size_range_slider.valueChanged.connect(self._change_feature_size_range)
+        self.ui.pixel_threshold_spin.lineEdit().returnPressed.connect(self._change_pixel_threshold_spin)
+        self.ui.hough_threshold_spin.lineEdit().returnPressed.connect(self._change_hough_threshold_spin)
 
         # Buttons / Check boxes
         self.ui.crosshair_detection_check.clicked.connect(self._change_detection_method)
         self.ui.file_path_browse_button.clicked.connect(self._click_browse_file)
         self.ui.save_image_button.clicked.connect(self._click_save_drawing)
 
-    def _change_feature_size_range(self):
+    def _change_blob_size_slider(self, is_max_widget: bool = True):
         """
-        Update the feature size range labels and image.
+        Update the blob size slider value and image when the spin box changes.
+        
+        :param is_max_widget: Is max or min slider?
+        :return: None
         """
-        new_val = self.feature_size_range
-        self.ui.feature_size_min.setText(str(new_val[0]))
-        self.ui.feature_size_max.setText(str(new_val[1]))
+        if is_max_widget:
+            new_val = self.ui.blob_max_size_slider.value()
+            min_val = self.ui.blob_min_size_slider.value()
+            if new_val <= min_val:
+                new_val = min_val + 1
+                with QSignalBlocker(self.ui.blob_max_size_slider):
+                    self.ui.blob_max_size_slider.setValue(new_val)
+            spin_handle = self.ui.blob_max_size_spin
+        else:
+            new_val = self.ui.blob_min_size_slider.value()
+            max_val = self.ui.blob_max_size_slider.value()
+            if new_val >= max_val:
+                new_val = max_val - 1
+                with QSignalBlocker(self.ui.blob_min_size_slider):
+                    self.ui.blob_min_size_slider.setValue(new_val)
+            spin_handle = self.ui.blob_min_size_spin
+        with QSignalBlocker(spin_handle):
+            spin_handle.setValue(new_val)
         self._update_image()
 
-    def _change_blob_size_range(self):
+    def _change_blob_size_spin(self, is_max_widget: bool = True):
         """
-        Update the blob size range labels and image.
+        Update the blob size spin box value and image when the slider changes.
+
+        :param is_max_widget: Is max or min spin box?
+        :return: None
         """
-        new_val = self.blob_size_range
-        self.ui.blob_size_min.setText(str(new_val[0]))
-        self.ui.blob_size_max.setText(str(new_val[1]))
+        if is_max_widget:
+            new_val = self.ui.blob_max_size_spin.value()
+            min_val = self.ui.blob_min_size_slider.value()
+            if new_val <= min_val:
+                new_val = min_val + 1
+                with QSignalBlocker(self.ui.blob_max_size_spin):
+                    self.ui.blob_max_size_spin.setValue(new_val)
+            slider_handle = self.ui.blob_max_size_slider
+        else:
+            new_val = self.ui.blob_min_size_spin.value()
+            max_val = self.ui.blob_max_size_slider.value()
+            if new_val >= max_val:
+                new_val = max_val - 1
+                with QSignalBlocker(self.ui.blob_min_size_spin):
+                    self.ui.blob_min_size_spin.setValue(new_val)
+            slider_handle = self.ui.blob_min_size_slider
+        slider_handle.setValue(new_val)
+        self._update_image()
+
+    def _change_feature_size_slider(self, is_max_widget: bool = True):
+        """
+        Update the feature size slider value and image when the spin box changes.
+
+        :param is_max_widget: Is max or min slider?
+        :return: None
+        """
+        if is_max_widget:
+            new_val = self.ui.feature_max_size_slider.value()
+            min_val = self.ui.feature_min_size_slider.value()
+            if new_val <= min_val:
+                new_val = min_val + 1
+                with QSignalBlocker(self.ui.feature_max_size_slider):
+                    self.ui.feature_max_size_slider.setValue(new_val)
+            spin_handle = self.ui.feature_max_size_spin
+        else:
+            new_val = self.ui.feature_min_size_slider.value()
+            max_val = self.ui.feature_max_size_slider.value()
+            if new_val >= max_val:
+                new_val = max_val - 1
+                with QSignalBlocker(self.ui.feature_min_size_slider):
+                    self.ui.feature_min_size_slider.setValue(new_val)
+            spin_handle = self.ui.feature_min_size_spin
+        with QSignalBlocker(spin_handle):
+            spin_handle.setValue(new_val)
+        self._update_image()
+
+    def _change_feature_size_spin(self, is_max_widget: bool = True):
+        """
+        Update the feature size spin box value and image when the slider changes.
+
+        :param is_max_widget: Is max or min spin box?
+        :return: None
+        """
+        if is_max_widget:
+            new_val = self.ui.feature_max_size_spin.value()
+            min_val = self.ui.feature_min_size_slider.value()
+            if new_val <= min_val:
+                new_val = min_val + 1
+                with QSignalBlocker(self.ui.feature_max_size_spin):
+                    self.ui.feature_max_size_spin.setValue(new_val)
+            slider_handle = self.ui.feature_max_size_slider
+        else:
+            new_val = self.ui.feature_min_size_spin.value()
+            max_val = self.ui.feature_max_size_slider.value()
+            if new_val >= max_val:
+                new_val = max_val - 1
+                with QSignalBlocker(self.ui.feature_min_size_spin):
+                    self.ui.feature_min_size_spin.setValue(new_val)
+            slider_handle = self.ui.feature_min_size_slider
+        slider_handle.setValue(new_val)
         self._update_image()
 
     def _change_gauss_blur_slider(self):
         """
         Update the Gaussian blur spin box value and image when the slider changes.
+        
+        :return: None
         """
         new_val = self.ui.gauss_blur_slider.value()
         with QSignalBlocker(self.ui.gauss_blur_spin):
@@ -124,27 +221,54 @@ class FeatureFinder(QWidget):
     def _change_gauss_blur_spin(self):
         """
         Update the Gaussian blur slider value when the spin box changes.
+        
+        :return: None
         """
         self.ui.gauss_blur_slider.setValue(self.gauss_blur)
 
-    def _change_threshold_slider(self):
+    def _change_hough_threshold_slider(self):
         """
-        Update the threshold spin box value and image when the slider changes.
+        Update the Hough threshold spin box value and image when the slider changes.
+
+        :return: None
         """
-        new_val = self.ui.threshold_slider.value()
-        with QSignalBlocker(self.ui.threshold_spin):
-            self.ui.threshold_spin.setValue(new_val)
+        new_val = self.ui.hough_threshold_slider.value()
+        with QSignalBlocker(self.ui.hough_threshold_spin):
+            self.ui.hough_threshold_spin.setValue(new_val)
         self._update_image()
 
-    def _change_threshold_spin(self):
+    def _change_hough_threshold_spin(self):
+        """
+        Update the Hough threshold slider value when the spin box changes.
+
+        :return: None
+        """
+        self.ui.hough_threshold_slider.setValue(self.hough_threshold)
+
+    def _change_pixel_threshold_slider(self):
+        """
+        Update the threshold spin box value and image when the slider changes.
+        
+        :return: None
+        """
+        new_val = self.ui.pixel_threshold_slider.value()
+        with QSignalBlocker(self.ui.pixel_threshold_spin):
+            self.ui.pixel_threshold_spin.setValue(new_val)
+        self._update_image()
+
+    def _change_pixel_threshold_spin(self):
         """
         Update the threshold slider value when the spin box changes.
+        
+        :return: None
         """
-        self.ui.threshold_slider.setValue(self.threshold)
+        self.ui.pixel_threshold_slider.setValue(self.pixel_threshold)
 
     def _change_circularity_slider(self):
         """
         Update the circularity spin box value and image when the slider changes.
+        
+        :return: None
         """
         new_val = self.ui.circularity_slider.value()
         with QSignalBlocker(self.ui.circularity_spin):
@@ -154,24 +278,28 @@ class FeatureFinder(QWidget):
     def _change_circularity_spin(self):
         """
         Update the circularity slider value when the spin box changes.
+        
+        :return: None
         """
         self.ui.circularity_slider.setValue(self.circularity)
 
     def _change_detection_method(self):
         """
         Change the detection method and update the UI accordingly.
+        
+        :return: None
         """
-        # Update blob size labels
-        low_val = int(min(self.detection_settings.blob_size) * self.range_size_factor)
-        high_val = int(max(self.detection_settings.blob_size) * self.range_size_factor)
-        self.ui.blob_size_min.setText(str(low_val))
-        self.ui.blob_size_max.setText(str(high_val))
-
-        # Update feature size labels
-        low_val = int(min(self.detection_settings.feature_size) * self.range_size_factor)
-        high_val = int(max(self.detection_settings.feature_size) * self.range_size_factor)
-        self.ui.feature_size_min.setText(str(low_val))
-        self.ui.feature_size_max.setText(str(high_val))
+        # # Update blob size labels
+        # low_val_blob = int(min(self.detection_settings.blob_size) * self.range_size_factor)
+        # high_val_blob = int(max(self.detection_settings.blob_size) * self.range_size_factor)
+        # self.ui.blob_size_min.setText(str(low_val_blob))
+        # self.ui.blob_size_max.setText(str(high_val_blob))
+        #
+        # # Update feature size labels
+        # low_val = int(min(self.detection_settings.feature_size) * self.range_size_factor)
+        # high_val = int(max(self.detection_settings.feature_size) * self.range_size_factor)
+        # self.ui.feature_size_min.setText(str(low_val))
+        # self.ui.feature_size_max.setText(str(high_val))
 
         # Define detector type
         if self._raw_image.size > 0:
@@ -221,12 +349,8 @@ class FeatureFinder(QWidget):
                 self._raw_image = image_array
                 self.drawn_image = convert_color_bit(image_array, color_channels=3, out_bit_depth=8)
 
-                # Update range sliders
-                feature_size_slider = self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0]
-                feature_size_slider._maximum = self.range_slider_max * self.range_size_factor
-
-                blob_size_slider = self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0]
-                blob_size_slider._maximum = self.range_slider_max * self.range_size_factor
+                # Update UI
+                self.ui.save_image_button.setEnabled(True)
 
                 # Init the appropriate detector
                 if self.rect_detection_status:
@@ -243,6 +367,8 @@ class FeatureFinder(QWidget):
     def _click_save_drawing(self):
         """
         Save the current drawn image to a file.
+        
+        :return: None
         """
         if self._raw_image.size > 0:
             # Define file path
@@ -252,19 +378,27 @@ class FeatureFinder(QWidget):
             if self.drawn_image.size > 0:
                 # Check the image path
                 checked_path = check_path(file_path)
+                checked_dir = os.path.dirname(checked_path)
 
                 # Save the image with cv2
                 try:
-                    if not os.path.isdir(os.path.dirname(checked_path)):
-                        os.makedirs(os.path.dirname(checked_path))
+                    if not os.path.isdir(checked_dir):
+                        os.makedirs(checked_dir)
                     cv2.imwrite(checked_path, self.drawn_image)
                 except PermissionError:
+                    checked_dir = os.getcwd()
                     file_path = os.path.join(os.getcwd(), os.path.basename(file_path))
                     self._logger.warning(f"Lacking write permissions for this directory. Saving locally instead.")
                     cv2.imwrite(file_path, self.drawn_image)
+                finally:
+                    self._logger.info(f"Image saved at: {file_path}")
 
-            # Log location of image
-            self._logger.info(f"Image saved at: {file_path}")
+                # Save YAML files
+                self.detection_settings.to_yaml(os.path.join(checked_dir, "detection_settings.yaml"))
+                for f, feature in enumerate(self.detector.found_features):
+                    write_mode = "w" if f == 0 else "a"
+                    feature.to_yaml(os.path.join(checked_dir, "found_features.yaml"), write_mode=write_mode)
+                self._logger.info(f"YAML files saved to: {file_path}")
 
     def _dialog(self, message: str, button: hex = 0x0, level: int = 0) -> int:
         """
@@ -306,62 +440,26 @@ class FeatureFinder(QWidget):
     def _set_defaults(self):
         """
         Set default values for UI elements.
+        
+        :return: None
         """
         settings = self.detection_settings
 
-        self.ui.threshold_slider.setValue(settings.threshold)
-        self.ui.threshold_spin.setValue(settings.threshold)
-
+        self.ui.circularity_slider.setValue(settings.circularity_min * 100)
+        self.ui.circularity_spin.setValue(settings.circularity_min)
         self.ui.gauss_blur_slider.setValue(settings.gauss)
         self.ui.gauss_blur_spin.setValue(settings.gauss)
-
-        self.ui.circularity_spin.setValue(settings.circularity_min)
-        self.ui.circularity_slider.setValue(settings.circularity_min * 100)
-
-    def _setup_range_sliders(self, target_widget: QHBoxLayout):
-        """
-        Fill in the placeholders with the custom range sliders.
-
-        :param target_widget: Placeholder handles.
-        """
-        # Define what default values to use
-        if "blob" in target_widget.objectName().lower():
-            defaults = self.detection_settings.blob_size
-        else:
-            defaults = self.detection_settings.feature_size
-
-        # Define default values
-        low_val = int(min(defaults) * self.range_size_factor)
-        high_val = int(max(defaults) * self.range_size_factor)
-
-        # Set parameters for target range slider
-        range_slider = QRangeSlider()
-        range_slider.setOrientation(Qt.Orientation.Horizontal)
-        range_slider._minimum = 0
-        range_slider._maximum = self.range_slider_max * self.range_size_factor
-        range_slider.setValue((low_val, high_val))
-
-        # Add configured slider to the application
-        target_widget.addWidget(range_slider)
-
-        # Update labels
-        if "blob" in target_widget.objectName().lower():
-            self.ui.blob_size_min.setText(str(low_val))
-            self.ui.blob_size_max.setText(str(high_val))
-        else:
-            self.ui.feature_size_min.setText(str(low_val))
-            self.ui.feature_size_max.setText(str(high_val))
+        self.ui.pixel_threshold_slider.setValue(settings.pixel_threshold)
+        self.ui.pixel_threshold_spin.setValue(settings.pixel_threshold)
 
     def _startup(self):
         """
         Routines to run on startup of the GUI.
+        
+        :return: None
         """
         # Init logger
         self._add_logger()
-
-        # Set up custom range sliders
-        self._setup_range_sliders(self.ui.feature_size_range_slider)
-        self._setup_range_sliders(self.ui.blob_size_range_slider)
 
         # Set default values of widget
         self._set_defaults()
@@ -372,38 +470,43 @@ class FeatureFinder(QWidget):
     def _update_image(self):
         """
         Update the drawn image internally.
+        
+        :return: None
         """
         if self._raw_image.size > 0:
             # Pre-process image
             update_next = self.detector.apply_gauss_blur(self.gauss_blur, update=(self.gauss_blur !=
                                                                                   self.detection_settings.gauss))
-            update_next = self.detector.apply_threshold(self.threshold, update=(update_next or self.threshold !=
-                                                                                self.detection_settings.threshold))
+            update_next = self.detector.apply_threshold(self.pixel_threshold,
+                                                        update=(update_next or self.pixel_threshold !=
+                                                                self.detection_settings.pixel_threshold))
             if not self.rect_detection_status:
-                self.detector.apply_hough_transform(self.threshold, self.feature_size_range[0],
-                                                    update=(update_next or self.threshold !=
-                                                            self.detection_settings.threshold or
+                self.detector.apply_hough_transform(self.hough_threshold, self.feature_size_range[0],
+                                                    update=(update_next or self.hough_threshold !=
+                                                            self.detection_settings.hough_threshold or
                                                             self.feature_size_range[0] !=
                                                             self.detection_settings.feature_size[0]))
 
             # Find and draw features/detections
-            self.drawn_image = self.detector.find_features_and_draw(self.blob_size_range, self.circularity,
-                                                                    self.feature_size_range)
+            self.detector.detect_features(self.feature_size_range, self.blob_size_range, self.circularity)
+            self.drawn_image = self.detector.display_image
 
             # Update stored detection settings
             self.detection_settings.blob_size = deepcopy(self.blob_size_range)
             self.detection_settings.circularity_min = deepcopy(self.circularity)
             self.detection_settings.feature_size = deepcopy(self.feature_size_range)
             self.detection_settings.gauss = deepcopy(self.gauss_blur)
-            self.detection_settings.threshold = deepcopy(self.threshold)
+            self.detection_settings.hough_threshold = deepcopy(self.hough_threshold)
+            self.detection_settings.pixel_threshold = deepcopy(self.pixel_threshold)
 
             # Log settings
             self._logger.info(f"Updated image with settings:\n"
-                              f"   blob size = {self.detection_settings.blob_size}"
-                              f"   circularity = {self.detection_settings.circularity_min}"
-                              f"   feature size = {self.detection_settings.feature_size}"
-                              f"   gauss kernel = {self.detection_settings.gauss}"
-                              f"   threshold = {self.detection_settings.threshold}")
+                              f"\tblob size = {self.detection_settings.blob_size}"
+                              f"\tcircularity = {self.detection_settings.circularity_min}"
+                              f"\tfeature size = {self.detection_settings.feature_size}"
+                              f"\tgauss kernel = {self.detection_settings.gauss}"
+                              f"\though threshold = {self.detection_settings.hough_threshold}"
+                              f"\tpixel threshold = {self.detection_settings.pixel_threshold}")
 
             # Update stream window
             self._update_stream_window()
@@ -411,6 +514,8 @@ class FeatureFinder(QWidget):
     def _update_stream_window(self):
         """
         Update the stream window with the drawn image.
+        
+        :return: None
         """
         if self.drawn_image.size > 0:
             s = self.drawn_image.shape
@@ -427,24 +532,28 @@ class FeatureFinder(QWidget):
         return float(self.ui.circularity_spin.value())
 
     @property
-    def blob_size_range(self) -> tuple:
+    def blob_size_range(self) -> tuple[float, float]:
         """
         Selected range of detected blob sizes.
 
         :return: Blob size range.
         """
-        raw_range = self.ui.blob_size_range_slider.parent().findChildren(QRangeSlider)[0].value()
-        return tuple([i * self.range_size_factor for i in raw_range])
+        min_size = self.ui.blob_min_size_slider.value()
+        max_size = self.ui.blob_max_size_slider.value()
+
+        return min_size * self.range_size_factor, max_size * self.range_size_factor
 
     @property
-    def feature_size_range(self) -> tuple:
+    def feature_size_range(self) -> tuple[float, float]:
         """
         Selected range of detected feature (rectangles or crosshairs) sizes.
 
         :return: Feature size range.
         """
-        raw_range = self.ui.feature_size_range_slider.parent().findChildren(QRangeSlider)[0].value()
-        return tuple([i * self.range_size_factor for i in raw_range])
+        min_size = self.ui.feature_min_size_slider.value()
+        max_size = self.ui.feature_max_size_slider.value()
+
+        return min_size * self.range_size_factor, max_size * self.range_size_factor
 
     @property
     def gauss_blur(self) -> int:
@@ -463,6 +572,24 @@ class FeatureFinder(QWidget):
             val += 1
 
         return val
+
+    @property
+    def hough_threshold(self) -> int:
+        """
+        Selected Hough line threshold value.
+
+        :return: Threshold value.
+        """
+        return int(self.ui.hough_threshold_spin.value())
+
+    @property
+    def pixel_threshold(self) -> int:
+        """
+        Selected pixel threshold value.
+
+        :return: Threshold value.
+        """
+        return int(self.ui.pixel_threshold_spin.value())
 
     @property
     def range_slider_max(self) -> int:
@@ -500,15 +627,6 @@ class FeatureFinder(QWidget):
         """
         return self.ui.crosshair_detection_check.isChecked()
 
-    @property
-    def threshold(self) -> int:
-        """
-        Selected pixel threshold value.
-
-        :return: Threshold value.
-        """
-        return int(self.ui.threshold_spin.value())
-
 
 class Display(QGraphicsView):
 
@@ -523,10 +641,14 @@ class Display(QGraphicsView):
         size_policy = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         size_policy.setHeightForWidth(self.sizePolicy().hasHeightForWidth())
         self.setSizePolicy(size_policy)
-        self.setMinimumSize(QSize(471, 411))
-        parent.ui.gridLayout_2.addWidget(self, 0, 2, 1, 1)
-        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
+        # self.setMinimumSize(QSize(471, 411))
 
+        # Get stream position
+        idx = parent.ui.gridLayout_2.indexOf(parent.ui.stream_window)
+        row, col, row_span, col_span = parent.ui.gridLayout_2.getItemPosition(idx)
+        parent.ui.gridLayout_2.addWidget(self, row, col, row_span, col_span)
+
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self.scene = CustomGraphicsScene(self)
         self.setScene(self.scene)
 
@@ -633,7 +755,7 @@ def launch_gui():
     :return:
     """
     app = QApplication(sys.argv)
-    app.setStyle(QStyleFactory.create("WindowsVista"))
+    app.setStyle(QStyleFactory.create("fusion"))
     widget = FeatureFinder()
     widget.show()
     sys.exit(app.exec())

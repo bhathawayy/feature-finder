@@ -1,0 +1,17 @@
+[project]
+name = "feature-finder"
+
+[tool.pyside6-project]
+files = ["feature_finder_test.py", "form.ui", "ui_form.py"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.pyside6-uic]
+inputs = [
+  "src/feature_finder/interface/form.ui"
+]
+outputs = [
+  "src/feature_finder/interface/ui_form.py"
+]

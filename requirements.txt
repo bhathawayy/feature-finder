@@ -3,6 +3,7 @@ numpy
 opencv-python
 pygetwindow
 pynput
+pydantic
 pyside6
-qtrangeslider @ git+https://github.com/bhathawayy/QtRangeSlider.git
 scipy
+pyyaml
