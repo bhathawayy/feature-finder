@@ -289,18 +289,6 @@ class FeatureFinder(QWidget):
         
         :return: None
         """
-        # # Update blob size labels
-        # low_val_blob = int(min(self.detection_settings.blob_size) * self.range_size_factor)
-        # high_val_blob = int(max(self.detection_settings.blob_size) * self.range_size_factor)
-        # self.ui.blob_size_min.setText(str(low_val_blob))
-        # self.ui.blob_size_max.setText(str(high_val_blob))
-        #
-        # # Update feature size labels
-        # low_val = int(min(self.detection_settings.feature_size) * self.range_size_factor)
-        # high_val = int(max(self.detection_settings.feature_size) * self.range_size_factor)
-        # self.ui.feature_size_min.setText(str(low_val))
-        # self.ui.feature_size_max.setText(str(high_val))
-
         # Define detector type
         if self._raw_image.size > 0:
             if self.rect_detection_status:
@@ -314,6 +302,8 @@ class FeatureFinder(QWidget):
     def _click_browse_file(self):
         """
         Open a file dialog to browse and select an image file.
+
+        :return: None
         """
 
         def import_image(file_path: str) -> np.ndarray:
@@ -633,6 +623,7 @@ class Display(QGraphicsView):
     def __init__(self, parent: FeatureFinder = None):
         """
         Graphics viewer object used to display frames from the camera.
+
         :param parent: Qt main window handle.
         """
         super().__init__(parent)
@@ -656,6 +647,7 @@ class Display(QGraphicsView):
     def on_image_received(self, image: QImage):
         """
         Action for when a new image is received.
+
         :param image: New image frame from camera.
         :return: None
         """
@@ -663,9 +655,11 @@ class Display(QGraphicsView):
 
 
 class CustomGraphicsScene(QGraphicsScene):
+
     def __init__(self, parent: Display = None):
         """
         Graphics scene object used to display frames from the camera.
+
         :param parent: Qt main window handle.
         """
         super().__init__(parent)
@@ -676,6 +670,9 @@ class CustomGraphicsScene(QGraphicsScene):
     def wheelEvent(self, event):
         """
         Handle the wheel event for zooming in/out under the mouse cursor.
+
+        :param event: Event object.
+        :return: None
         """
         if self.root.underMouse():  # Ensure the mouse is over the widget
             # Get the zoom factor
@@ -701,6 +698,7 @@ class CustomGraphicsScene(QGraphicsScene):
     def set_image(self, image: QImage):
         """
         Set the image handle to be equal to the camera frame.
+
         :param image: New image frame from camera.
         :return: None
         """
@@ -710,6 +708,7 @@ class CustomGraphicsScene(QGraphicsScene):
     def drawBackground(self, painter: QPainter, rect: QRectF):
         """
         Over-ride the internal drawBackground command.
+
         :param painter: Qt painter object used to "draw" image.
         :param rect: Qt rectangular object to define image size.
         :return: None
@@ -752,7 +751,8 @@ class CustomGraphicsScene(QGraphicsScene):
 def launch_gui():
     """
     Main functionality. Launches GUI for feature detection.
-    :return:
+
+    :return: None
     """
     app = QApplication(sys.argv)
     app.setStyle(QStyleFactory.create("fusion"))

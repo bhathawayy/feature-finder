@@ -11,9 +11,6 @@ T = TypeVar("T", bound="YamlConfig")
 
 
 class YamlConfig(BaseModel):
-    """
-    Adds direct YAML loading/saving to Pydantic classes.
-    """
 
     @classmethod
     def from_yaml(cls: Type[T], path2yaml: str) -> Optional[T]:
@@ -106,6 +103,7 @@ class FeatureInfo(YamlConfig):
 def check_path(target_path: str, overwrite: bool = True) -> str:
     """
     Checks if directory and path exists, if not it creates one.
+
     :param overwrite: Overwrite the file (Ture) or not (False).
     :param target_path: Path to file.
     :return: Unique path.
@@ -148,6 +146,7 @@ def convert_color_bit(image: np.ndarray | str, color_channels: int = None, out_b
                       in_bit_depth: int = None) -> np.ndarray:
     """
     Converts image array into RGB/Monochrome with specified bit-depth.
+
     :param color_channels: Color descriptor options: 3 = RGB, 1 = Monochrome
     :param image: Image array to be processed.
     :param in_bit_depth: Bit-depth options: 8, 12, 16

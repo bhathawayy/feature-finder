@@ -13,6 +13,7 @@ class DetectionBase(abc.ABC):
     def __init__(self, image_array: np.ndarray):
         """
         GUI to help the user determine proper detection values for what gets entered in detection_setting.py.
+
         :param image_array: Image array for processing.
         """
         # Set class variables
@@ -38,8 +39,12 @@ class DetectionBase(abc.ABC):
     def _find_blobs(self, contours: list[tuple], blob_range: tuple[float, float], circularity_min: float) \
             -> tuple[list[FeatureInfo], list[tuple]]:
         """
-        Once contours have found, fit the appropriate shape to them and draw these on the debug image.
-        :return: None
+        Once contours have found, search for blobs, then draw these on the debug image.
+
+        :param contours: Edges found.
+        :param blob_range: Range of acceptable blob areas.
+        :param circularity_min: Minimum acceptable blob circularity. The closer to 1, the more "circular".
+        :return: (1) List of features found, and (2) list of remaining non-blob contours.
         """
         non_blob_contours = []
         blobs_found = []
@@ -67,6 +72,11 @@ class DetectionBase(abc.ABC):
         return blobs_found, non_blob_contours
 
     def _find_contours(self, contour_range: tuple[float, float]) -> list[tuple]:
+        """
+
+        :param contour_range:
+        :return:
+        """
         # Find edges
         contours_found, _ = cv2.findContours(self._image_thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
@@ -92,8 +102,11 @@ class DetectionBase(abc.ABC):
     @abc.abstractmethod
     def _find_features(self, contours: list[tuple], feature_range: tuple[float, float]) -> list[FeatureInfo]:
         """
-        Once contours have found, fit the appropriate shape to them and draw these on the debug image.
-        :return: None
+        Once contours have found, search for the appropriate shapes, then draw these on the debug image.
+
+        :param contours: Non-blob contours
+        :param feature_range: Range of acceptable feature areas.
+        :return: List of features found
         """
         pass
 
@@ -101,7 +114,9 @@ class DetectionBase(abc.ABC):
     def _make_odd(val: float | int, min_val: int = 1) -> int:
         """
         Ensure variable is greater than 0 and odd.
+
         :param val: Value to check.
+        :param min_val: Minimum allowable value.
         :return: Odd integer, greater than 0.
         """
         if val < min_val:
@@ -114,6 +129,7 @@ class DetectionBase(abc.ABC):
     def _reduce_noise(self, sigma: int = 1500) -> np.ndarray:
         """
         Reduce noise by increasing dark patterns and ignoring background contributions.
+
         :param sigma: Gaussian shape for brightness multiplication.
         :return: 'brightened' image
         """
@@ -158,6 +174,13 @@ class DetectionBase(abc.ABC):
         return brightened_image
 
     def apply_gauss_blur(self, gauss: int, update: bool = False) -> bool:
+        """
+        Applies Gaussian blur filter.
+
+        :param gauss: Gaussian kernel value.
+        :param update: Update the shown image.
+        :return: Whether the shown image needs further updates.
+        """
         if update or len(self._image_gauss) == 0:
             # Check input
             gauss = self._make_odd(gauss)
@@ -171,6 +194,14 @@ class DetectionBase(abc.ABC):
         return update_next
 
     def apply_hough_transform(self, threshold: int, min_line_length: float, update: bool = False) -> bool:
+        """
+        Applies Hough Transform filter.
+
+        :param threshold: Hough thresholding value.
+        :param min_line_length: Allowable length of lines.
+        :param update: Update the shown image.
+        :return: Whether the shown image needs further updates.
+        """
         if update or len(self._lines) == 0:
             lines = cv2.HoughLinesP(self._image_thresh, 1, np.pi / 180, maxLineGap=self._deviation_cutoff,
                                     threshold=threshold, minLineLength=int(min_line_length))
@@ -183,6 +214,13 @@ class DetectionBase(abc.ABC):
         return update_next
 
     def apply_threshold(self, threshold: int, update: bool = False) -> bool:
+        """
+        Applies threshold filter.
+
+        :param threshold: Thresholding value.
+        :param update: Update the shown image.
+        :return: Whether the shown image needs further updates.
+        """
         if update or len(self._image_thresh) == 0:
             _, self._image_thresh = cv2.threshold(self._image_gauss, threshold, 255, cv2.THRESH_BINARY)
             update_next = True
@@ -193,6 +231,14 @@ class DetectionBase(abc.ABC):
 
     def detect_features(self, feature_range: tuple[float, float], blob_range: tuple[float, float],
                         circularity_min: float) -> list[FeatureInfo]:
+        """
+        Detect features i.e. blobs AND rectangular or crosshairs.
+
+        :param feature_range: Allowable feature size range.
+        :param blob_range: Allowable blob size range.
+        :param circularity_min: Allowable minimum blob circularity.
+        :return: List of found features.
+        """
         # Reset drawn image
         self.display_image = self._image_rgb8.copy()
 
@@ -213,14 +259,18 @@ class SFRDetection(DetectionBase):
     def __init__(self, image_array: np.ndarray):
         """
         SFR-specific instance (also works for blob and/or square detection).
+
         :param image_array: Image array for processing.
         """
         super().__init__(image_array)
 
     def _find_features(self, contours: list[tuple], feature_range: tuple[int, int]) -> list[FeatureInfo]:
         """
-        Once contours have found, fit the appropriate shape to them and draw these on the debug image.
-        :return: None
+        Once contours have found, search for the appropriate shapes, then draw these on the debug image.
+
+        :param contours: Non-blob contours
+        :param feature_range: Range of acceptable feature areas.
+        :return: List of features found
         """
         # Find features
         features_found = []
@@ -248,14 +298,18 @@ class CHDetection(DetectionBase):
     def __init__(self, image_array: np.ndarray):
         """
         Crosshair-specific instance.
+
         :param image_array: Image array for processing.
         """
         super().__init__(image_array)
 
     def _find_features(self, contours: list[tuple], feature_range: tuple[int, int]) -> list[FeatureInfo]:
         """
-        Once contours have found, fit the appropriate shape to them and draw these on the debug image.
-        :return: None
+        Once contours have found, search for the appropriate shapes, then draw these on the debug image.
+
+        :param contours: Non-blob contours (Unused here)
+        :param feature_range: Range of acceptable feature areas.
+        :return: List of features found
         """
         # Find features
         features_found = []
