@@ -5,24 +5,7 @@ import cv2
 import numpy as np
 from scipy.signal import argrelmin
 
-from feature_finder.processing_support import convert_color_bit, get_point_distance
-
-
-class DefaultSettings:
-    """
-    Default detection settings. Note, the area or size parameters can typically be estimated using ImageJ. Fit a
-    shape to your feature then "Measure" to return the area in pxl^2.
-
-    USE THE HELPER GUI TO CONFIGURE!
-    """
-    # Parameters used for detection algorithms
-    blob_size: tuple = (0, 220000)  # Expected size of fiducial [(pxl^2, pxl^2)]
-    circularity_min: float = 0.8  # The closer to 1, the more "perfect" the circle is
-    feature_size: tuple = (0, 700000)  # Expected size of feature (non-fiducial) [(pxl^2, pxl^2)]
-    gauss: int = 21  # Gaussian blur kernel size
-    range_slider_max: int = 100000  # max value of range sliders
-    pixel_threshold: int = 84  # Explicit edge thresholding
-    hough_threshold: int = 80  # Explicit Hough line thresholding
+from feature_finder.processing_support import convert_color_bit, get_point_distance, get_midpoint, FeatureInfo
 
 
 class DetectionBase(abc.ABC):
@@ -33,17 +16,18 @@ class DetectionBase(abc.ABC):
         :param image_array: Image array for processing.
         """
         # Set class variables
-        self._color_blob: tuple = (0, 255, 0)  # Color for blobs [BGR]
-        self._color_edge_txt: tuple = (0, 0, 255)  # Color for edges or text [BGR]
-        self._color_rect: tuple = (255, 0, 0)  # Color for rects [BGR]
-        self._draw_size: int = 8
+        self._color_blob: tuple[int, int, int] = (0, 255, 0)  # Color for blobs [BGR]
+        self._color_edge_txt: tuple[int, int, int] = (0, 0, 255)  # Color for edges or text [BGR]
+        self._color_rect: tuple[int, int, int] = (255, 0, 0)  # Color for rects [BGR]
         self._deviation_cutoff: int = 100
+        self._draw_size: int = 8
         self._image_gauss: np.ndarray = np.array([])
         self._image_normal: np.ndarray = np.array([])
         self._image_thresh: np.ndarray = np.array([])
         self._lines: list = []
         self._raw_array: np.ndarray = image_array
         self.display_image: np.ndarray = np.array([])
+        self.found_features: list[FeatureInfo] = []
 
         if self._raw_array.size > 0:
             self._image_mono8: np.ndarray = convert_color_bit(self._raw_array, color_channels=1, out_bit_depth=8)
@@ -51,42 +35,62 @@ class DetectionBase(abc.ABC):
         else:
             raise FileNotFoundError("Improper image input!")
 
-    def apply_gauss_blur(self, gauss: int, update: bool = False) -> bool:
-        if update or len(self._image_gauss) == 0:
-            # Check input
-            gauss = self._make_odd(gauss)
+    def _find_blobs(self, contours: list[tuple], blob_range: tuple[float, float], circularity_min: float) \
+            -> tuple[list[FeatureInfo], list[tuple]]:
+        """
+        Once contours have found, fit the appropriate shape to them and draw these on the debug image.
+        :return: None
+        """
+        non_blob_contours = []
+        blobs_found = []
+        for contour, approx, contour_area, contour_perimeter in contours:
 
-            # Process image
-            self._image_gauss = cv2.GaussianBlur(self._image_mono8, (gauss, gauss), sigmaX=1)
-            update_next = True
-        else:
-            update_next = False
+            # Sort according to circularity
+            circularity = 4 * np.pi * (contour_area / (contour_perimeter * contour_perimeter))
+            if circularity >= circularity_min and contour_area <= blob_range[1]:
 
-        return update_next
+                # Filter based on circle size
+                circle = np.array([pnt[0] for pnt in approx])
+                shape_area = cv2.contourArea(circle)
+                if blob_range[0] <= shape_area <= blob_range[1]:
+                    # Draw shape
+                    xc, yc, rc, sig = circle_fit.least_squares_circle(circle)
+                    center = (int(xc), int(yc))
+                    cv2.circle(self.display_image, center, int(rc), self._color_blob, self._draw_size)
 
-    def apply_hough_transform(self, threshold: int, min_line_length: int, update: bool = False) -> bool:
-        if update or len(self._lines) == 0:
-            lines = cv2.HoughLinesP(self._image_thresh, 1, np.pi / 180, maxLineGap=self._deviation_cutoff,
-                                    threshold=threshold, minLineLength=min_line_length)
-            if lines is not None:
-                self._lines = lines.reshape(-1, 4)
-            update_next = True
-        else:
-            update_next = False
+                    # Save to found
+                    blobs_found.append(FeatureInfo(shape_type="blob", area=shape_area, centroid=(xc, yc)))
 
-        return update_next
+            else:
+                non_blob_contours.append((contour, approx, contour_area, contour_perimeter))
 
-    def apply_threshold(self, threshold: int, update: bool = False) -> bool:
-        if update or len(self._image_thresh) == 0:
-            _, self._image_thresh = cv2.threshold(self._image_gauss, threshold, 255, cv2.THRESH_BINARY)
-            update_next = True
-        else:
-            update_next = False
+        return blobs_found, non_blob_contours
 
-        return update_next
+    def _find_contours(self, contour_range: tuple[float, float]) -> list[tuple]:
+        # Find edges
+        contours_found, _ = cv2.findContours(self._image_thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+
+        contours_with_info = []
+        for contour in contours_found:
+
+            # Filter based on largest range of acceptable sizes
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter == 0:
+                continue
+            area = cv2.contourArea(contour)
+            if contour_range[0] < area <= contour_range[1]:
+                # Show edge detection
+                approx = cv2.approxPolyDP(contour, 1, True)
+                cv2.drawContours(self.display_image, [approx], 0, self._color_edge_txt,
+                                 int(self._draw_size / 2))
+
+                # Save detection info
+                contours_with_info.append((contour, approx, area, perimeter))
+
+        return contours_with_info
 
     @abc.abstractmethod
-    def find_features_and_draw(self, blob_range: tuple, circularity_min: float, feature_range: tuple) -> np.ndarray:
+    def _find_features(self, contours: list[tuple], feature_range: tuple[float, float]) -> list[FeatureInfo]:
         """
         Once contours have found, fit the appropriate shape to them and draw these on the debug image.
         :return: None
@@ -153,6 +157,56 @@ class DetectionBase(abc.ABC):
 
         return brightened_image
 
+    def apply_gauss_blur(self, gauss: int, update: bool = False) -> bool:
+        if update or len(self._image_gauss) == 0:
+            # Check input
+            gauss = self._make_odd(gauss)
+
+            # Process image
+            self._image_gauss = cv2.GaussianBlur(self._image_mono8, (gauss, gauss), sigmaX=1)
+            update_next = True
+        else:
+            update_next = False
+
+        return update_next
+
+    def apply_hough_transform(self, threshold: int, min_line_length: float, update: bool = False) -> bool:
+        if update or len(self._lines) == 0:
+            lines = cv2.HoughLinesP(self._image_thresh, 1, np.pi / 180, maxLineGap=self._deviation_cutoff,
+                                    threshold=threshold, minLineLength=int(min_line_length))
+            if lines is not None:
+                self._lines = np.reshape(lines, (-1, 4))
+            update_next = True
+        else:
+            update_next = False
+
+        return update_next
+
+    def apply_threshold(self, threshold: int, update: bool = False) -> bool:
+        if update or len(self._image_thresh) == 0:
+            _, self._image_thresh = cv2.threshold(self._image_gauss, threshold, 255, cv2.THRESH_BINARY)
+            update_next = True
+        else:
+            update_next = False
+
+        return update_next
+
+    def detect_features(self, feature_range: tuple[float, float], blob_range: tuple[float, float],
+                        circularity_min: float) -> list[FeatureInfo]:
+        # Reset drawn image
+        self.display_image = self._image_rgb8.copy()
+
+        # Detect features
+        contour_range = (min(blob_range[0], feature_range[0]), max(blob_range[1], feature_range[1]))
+        contours = self._find_contours(contour_range)
+        blobs_found, non_blob_contours = self._find_blobs(contours, blob_range, circularity_min)
+        features_found = self._find_features(non_blob_contours, feature_range)
+
+        # Save all findings for reference
+        self.found_features = blobs_found + features_found
+
+        return self.found_features
+
 
 class SFRDetection(DetectionBase):
 
@@ -163,48 +217,30 @@ class SFRDetection(DetectionBase):
         """
         super().__init__(image_array)
 
-    def find_features_and_draw(self, blob_range: tuple, circularity_min: float, feature_range: tuple) -> np.ndarray:
+    def _find_features(self, contours: list[tuple], feature_range: tuple[int, int]) -> list[FeatureInfo]:
         """
         Once contours have found, fit the appropriate shape to them and draw these on the debug image.
         :return: None
         """
-        # Rest drawn image
-        self.display_image = self._image_rgb8.copy()
+        # Find features
+        features_found = []
+        for contour, approx, contour_area, contour_perimeter in contours:
 
-        # Find edges
-        contours_found, _ = cv2.findContours(self._image_thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-        for contour in contours_found:
+            # Filter based on rectangle size
+            box = cv2.boxPoints(cv2.minAreaRect(contour)).astype(int)
+            shape_area = cv2.contourArea(box)
+            if feature_range[0] <= shape_area <= feature_range[1]:
+                # Draw shape
+                cv2.drawContours(self.display_image, [box], 0, self._color_rect, self._draw_size)
 
-            # Filter based on largest range of acceptable sizes
-            perimeter = cv2.arcLength(contour, True)
-            if perimeter == 0:
-                continue
-            contour_area = cv2.contourArea(contour)
-            if min(blob_range[0], feature_range[0]) < contour_area <= max(blob_range[1], feature_range[1]):
-                # Show edge detection first
-                approx = cv2.approxPolyDP(contour, 1, True)
-                cv2.drawContours(self.display_image, [approx], 0, self._color_edge_txt,
-                                 int(self._draw_size / 2))
+                # Save to found
+                (cx, cy), (_, _), angle = cv2.minAreaRect(contour)
+                features_found.append(FeatureInfo(shape_type="rectangular",
+                                                  area=shape_area,
+                                                  centroid=(cx, cy),
+                                                  slope_or_tilt=angle))
 
-                # Sort according to circularity
-                circularity = 4 * np.pi * (contour_area / (perimeter * perimeter))
-                if circularity >= circularity_min and contour_area <= blob_range[1]:
-
-                    # Filter based on circle size
-                    circle = np.array([pnt[0] for pnt in approx])
-                    shape_area = cv2.contourArea(circle)
-                    if blob_range[0] <= shape_area <= blob_range[1]:
-                        xc, yc, rc, sig = circle_fit.least_squares_circle(circle)
-                        center = (int(xc), int(yc))
-                        cv2.circle(self.display_image, center, int(rc), self._color_blob, self._draw_size)
-                else:
-                    # Filter based on rectangle size
-                    box = cv2.boxPoints(cv2.minAreaRect(contour)).astype(int)
-                    shape_area = cv2.contourArea(box)
-                    if feature_range[0] <= shape_area <= feature_range[1]:
-                        cv2.drawContours(self.display_image, [box], 0, self._color_rect, self._draw_size)
-
-        return self.display_image
+        return features_found
 
 
 class CHDetection(DetectionBase):
@@ -216,58 +252,34 @@ class CHDetection(DetectionBase):
         """
         super().__init__(image_array)
 
-    def find_features_and_draw(self, blob_range: tuple, circularity_min: float, feature_range: tuple) -> np.ndarray:
+    def _find_features(self, contours: list[tuple], feature_range: tuple[int, int]) -> list[FeatureInfo]:
         """
         Once contours have found, fit the appropriate shape to them and draw these on the debug image.
         :return: None
         """
-        # Rest drawn image
-        self.display_image = self._image_rgb8.copy()
-
-        # Find fiducials
-        contours_found, _ = cv2.findContours(self._image_thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-        for contour in contours_found:
-
-            # Filter based on largest range of acceptable sizes
-            perimeter = cv2.arcLength(contour, True)
-            if perimeter == 0:
-                continue
-            contour_area = cv2.contourArea(contour)
-            if blob_range[0] < contour_area <= blob_range[1]:
-                # Show edge detection first
-                approx = cv2.approxPolyDP(contour, 1, True)
-                cv2.drawContours(self.display_image, [approx], 0, self._color_edge_txt,
-                                 int(self._draw_size / 2))
-
-                # Sort according to circularity
-                circularity = 4 * np.pi * (contour_area / (perimeter * perimeter))
-                if circularity >= circularity_min and contour_area <= blob_range[1]:
-
-                    # Filter based on circle size
-                    circle = np.array([pnt[0] for pnt in approx])
-                    shape_area = cv2.contourArea(circle)
-                    if blob_range[0] <= shape_area <= blob_range[1]:
-                        xc, yc, rc, sig = circle_fit.least_squares_circle(circle)
-                        center = (int(xc), int(yc))
-                        cv2.circle(self.display_image, center, int(rc), self._color_blob, self._draw_size)
-
-        # Find Hough lines
+        # Find features
+        features_found = []
         for end_points in self._lines:
-            # Calculate slope
+
+            # Filter based on size
             x1, y1, x2, y2 = end_points
-            if x1 == x2:
-                slope = np.inf
-            else:
-                slope = abs((y2 - y1) / (x2 - x1))
+            line_length = get_point_distance((x1, y1), (x2, y2))
+            if feature_range[0] <= line_length <= feature_range[1]:
 
-            # Determine color based on slope
-            if slope < 1:
-                color = self._color_blob  # horizontal lines
-            else:
-                color = self._color_edge_txt  # vertical lines
+                # Determine color based on slope
+                slope = np.inf if x1 == x2 else abs((y2 - y1) / (x2 - x1))
+                if slope < 1:
+                    color = self._color_blob  # horizontal lines
+                else:
+                    color = self._color_edge_txt  # vertical lines
 
-            # Draw lines
-            if feature_range[0] <= get_point_distance((x1, y1), (x2, y2)) <= feature_range[1]:
+                # Draw shape
                 cv2.line(self.display_image, (x1, y1), (x2, y2), color, self._draw_size)
 
-        return self.display_image
+                # Save to found
+                features_found.append(FeatureInfo(shape_type="line",
+                                                  area=line_length,
+                                                  centroid=get_midpoint((x1, y1), (x2, y2)),
+                                                  slope_or_tilt=slope))
+
+        return features_found
