@@ -71,11 +71,13 @@ class DetectionBase(abc.ABC):
 
         return blobs_found, non_blob_contours
 
-    def _find_contours(self, contour_range: tuple[float, float]) -> list[tuple]:
+    def _find_contours(self, contour_range: tuple[float, float], draw_contours: bool = True) -> list[tuple]:
         """
+        Find contours/edges in the image.
 
-        :param contour_range:
-        :return:
+        :param contour_range: Range of acceptable contour areas.
+        :param draw_contours: Flag for drawing contours.
+        :return: List of contours and relevant info.
         """
         # Find edges
         contours_found, _ = cv2.findContours(self._image_thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
@@ -91,8 +93,9 @@ class DetectionBase(abc.ABC):
             if contour_range[0] < area <= contour_range[1]:
                 # Show edge detection
                 approx = cv2.approxPolyDP(contour, 1, True)
-                cv2.drawContours(self.display_image, [approx], 0, self._color_edge_txt,
-                                 int(self._draw_size / 2))
+                if draw_contours:
+                    cv2.drawContours(self.display_image, [approx], 0, self._color_edge_txt,
+                                     int(self._draw_size / 2))
 
                 # Save detection info
                 contours_with_info.append((contour, approx, area, perimeter))
@@ -230,13 +233,14 @@ class DetectionBase(abc.ABC):
         return update_next
 
     def detect_features(self, feature_range: tuple[float, float], blob_range: tuple[float, float],
-                        circularity_min: float) -> list[FeatureInfo]:
+                        circularity_min: float, draw_contours: bool = False) -> list[FeatureInfo]:
         """
         Detect features i.e. blobs AND rectangular or crosshairs.
 
         :param feature_range: Allowable feature size range.
         :param blob_range: Allowable blob size range.
         :param circularity_min: Allowable minimum blob circularity.
+        :param draw_contours: Flag to draw contours.
         :return: List of found features.
         """
         # Reset drawn image
@@ -244,7 +248,7 @@ class DetectionBase(abc.ABC):
 
         # Detect features
         contour_range = (min(blob_range[0], feature_range[0]), max(blob_range[1], feature_range[1]))
-        contours = self._find_contours(contour_range)
+        contours = self._find_contours(contour_range, draw_contours=draw_contours)
         blobs_found, non_blob_contours = self._find_blobs(contours, blob_range, circularity_min)
         features_found = self._find_features(non_blob_contours, feature_range)
 
