@@ -1,7 +1,7 @@
 # This Python file uses the following encoding: utf-8
 import sys
 
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QWidget, QStyleFactory
 
 # Important:
 # You need to run the following command to generate the ui_form.py file
@@ -18,6 +18,7 @@ class featureFinder(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyle(QStyleFactory.create("fusion"))
     widget = featureFinder()
     widget.show()
     sys.exit(app.exec())
