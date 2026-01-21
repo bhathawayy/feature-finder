@@ -21,7 +21,8 @@ class DefaultSettings:
     feature_size: tuple = (0, 700000)  # Expected size of feature (non-fiducial) [(pxl^2, pxl^2)]
     gauss: int = 21  # Gaussian blur kernel size
     range_slider_max: int = 100000  # max value of range sliders
-    threshold: int = 84  # Explicit edge thresholding
+    pixel_threshold: int = 84  # Explicit edge thresholding
+    hough_threshold: int = 80  # Explicit Hough line thresholding
 
 
 class DetectionBase(abc.ABC):

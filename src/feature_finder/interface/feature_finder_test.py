@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QWidget, QStyleFactory
 #     pyside2-uic form.ui -o ui_form.py
 from ui_form import Ui_featureFinder
 
+
 class featureFinder(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
