@@ -41,6 +41,12 @@ Run the application:
 ```bash
 python -m feature_finder.app_main
 ```
+--or--
+```bash
+from feature_finder import app_main
+
+app_main.launch_gui()
+```
 
 1. Load an image using the file dialog
 2. Select detection method (Blob, Rectangle, or Cross-hair)
