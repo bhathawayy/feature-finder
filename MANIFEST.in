@@ -1,1 +1,2 @@
-include featureFinder/resources/*
+recursive-include src/feature_finder/resources *
+recursive-include src/feature_finder/interface *

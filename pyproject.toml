@@ -24,7 +24,11 @@ where = ["src"]
 include = ["feature_finder", "feature_finder.*"]
 
 [tool.setuptools.data-files]
-"feature_finder_resources" = ["interface/*", "resources/*"]
+"feature_finder" = [
+  "resources/**",
+  "interface/**",
+]
+
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
