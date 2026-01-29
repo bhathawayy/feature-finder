@@ -1,7 +1,7 @@
 [project]
 name = "feature_finder"
 authors = [
-    {name = "Brooke Hathaway"}
+    { name = "Brooke Hathaway" }
 ]
 version = "1.1.0"
 requires-python = ">=3.12"
@@ -25,10 +25,9 @@ include = ["feature_finder", "feature_finder.*"]
 
 [tool.setuptools.data-files]
 "feature_finder" = [
-  "resources/**",
-  "interface/**",
+    "resources/**",
+    "interface/**",
 ]
 
-
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
+dependencies = { file = ["requirements.txt"] }
