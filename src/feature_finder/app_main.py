@@ -1,4 +1,3 @@
-import ctypes
 import logging
 import math
 import os
@@ -7,12 +6,14 @@ from copy import deepcopy
 
 import cv2
 import numpy as np
-import pygetwindow as gw
-import winsound
+try:
+    import pygetwindow as gw
+except ImportError:
+    gw = None
 from PySide6.QtCore import QRectF, Slot, QSignalBlocker
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
-                               QFileDialog)
+                               QFileDialog, QMessageBox)
 
 from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection
 from feature_finder.interface.ui_form import Ui_featureFinder
@@ -313,13 +314,24 @@ class FeatureFinder(QWidget):
             :param file_path: Path to the image file
             :return: Numpy array containing the image data
             """
+            ok = False
+            rgb_image =  np.array([])
+
+            # Try to import image
             if os.path.isfile(file_path):
                 raw_array = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
-                rgb8_image = convert_color_bit(raw_array, color_channels=3, out_bit_depth=8)
-            else:
-                rgb8_image = np.array([])
+                if raw_array.size > 0 and raw_array is not None:
+                    rgb_image = convert_color_bit(raw_array, color_channels=3, out_bit_depth=8)
+                    ok = True
 
-            return rgb8_image
+            # Case for bad path
+            if ok:
+                self._logger.info(f"Imported image at: {file_path}")
+            else:
+                self._dialog_and_log(f"Invalid file selected!\n\nPlease check the file path and integrity at: "
+                                     f"{file_path}", level=2)
+
+            return rgb_image
 
         # Setup file browser dialog box
         file_dialog = QFileDialog(self)
@@ -330,10 +342,10 @@ class FeatureFinder(QWidget):
         if file_dialog.exec():
             selected_file = file_dialog.selectedFiles()[0]
             image_array = import_image(selected_file)
+
             if image_array.size > 0:
                 # Set the entry box to the valid image path and log
                 self.ui.file_path_entry.setText(selected_file)
-                self._logger.info(f"Imported image at: {selected_file}")
 
                 # Store the image array
                 self._raw_image = image_array
@@ -350,9 +362,6 @@ class FeatureFinder(QWidget):
 
                 # Update the stream window to show imported image
                 self._update_image()
-            else:
-                self._dialog("Invalid file selected!\n\nPlease check the file path and integrity.", level=1)
-                self._logger.warning(f"Ignoring invalid image at {selected_file}")
 
     def _click_save_drawing(self):
         """
@@ -390,42 +399,68 @@ class FeatureFinder(QWidget):
                     feature.to_yaml(os.path.join(checked_dir, "found_features.yaml"), write_mode=write_mode)
                 self._logger.info(f"YAML files saved to: {file_path}")
 
-    def _dialog(self, message: str, button: hex = 0x0, level: int = 0) -> int:
+    def _dialog_and_log(self, message: str, button: int = 0, level: int = 0, err_handle: Exception | None = None) -> int:
         """
         Display a dialog box with the given message.
 
         :param message: Message to display in the dialog box
-        :param button: Button options (0x0 = OK, 0x01 = OK/CANCEL, 0x03 = YES/NO/CANCEL, 0x04 = YES/NO)
+        :param button: Button options (default = OK, 1 = OK/CANCEL, 3 = YES/NO/CANCEL, 4 = YES/NO)
         :param level: Dialog level (0 = prompt, 1 = warning, 2 = error)
         :return: User's response to the dialog.
         """
-        # Set local variables
-        message = bytes(message, 'utf-8')
-        title = b"Action Required"
-        icon = 0x40  # info icon
+        # Set title and icon based on level
+        msg_box = QMessageBox(self)
+        msg_box.setText(message)
         if level == 1:
-            title = b"Warning"
-            icon = 0x30  # icon exclaim/warning
+            msg_box.setWindowTitle("Warning")
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            self._logger.warning(message)
         elif level == 2:
-            title = b"ERROR"
-            icon = 0x10  # icon stop/error
+            msg_box.setWindowTitle("ERROR")
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            self._logger.error(f"{message}\n\n{str(err_handle)}")
+        else:
+            msg_box.setWindowTitle("Action Required")
+            msg_box.setIcon(QMessageBox.Icon.Information)
 
-        # Set widget as active window
-        try:
-            win = gw.getWindowsWithTitle(self.window().windowTitle())[0]
-            win.activate()
-        except (IndexError, RuntimeError):
-            self._logger.warning(f"App not open. Could not display dialog: {message}")
-            return -1
-        except gw.PyGetWindowException:
-            pass
+        # Set buttons based on button parameter
+        button_map = {
+            1: QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            3: QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+            4: QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        }
+        msg_box.setStandardButtons(button_map.get(button, QMessageBox.StandardButton.Ok))
 
-        # Display dialog message
-        if level != 2:
-            winsound.Beep(800, 500)
-        dialog_answer = ctypes.windll.user32.MessageBoxA(0, message, title, button | icon | 0x00001000)
+        # Activate window (cross-platform)
+        self.activateWindow()
+        self.raise_()
 
-        return dialog_answer
+        return msg_box.exec()
+        # # Set local variables
+        # message = bytes(message, 'utf-8')
+        # title = b"Action Required"
+        # icon = 0x40  # info icon
+        # if level == 1:
+        #     title = b"Warning"
+        #     icon = 0x30  # icon exclaim/warning
+        # elif level == 2:
+        #     title = b"ERROR"
+        #     icon = 0x10  # icon stop/error
+        #
+        # # Set widget as active window
+        # try:
+        #     win = gw.getWindowsWithTitle(self.window().windowTitle())[0]
+        #     win.activate()
+        # except (IndexError, RuntimeError):
+        #     self._logger.warning(f"App not open. Could not display dialog: {message}")
+        #     return -1
+        # except gw.PyGetWindowException:
+        #     pass
+        #
+        # # Display dialog message
+        # dialog_answer = ctypes.windll.user32.MessageBoxA(0, message, title, button | icon | 0x00001000)
+        #
+        # return dialog_answer
 
     def _set_defaults(self):
         """
