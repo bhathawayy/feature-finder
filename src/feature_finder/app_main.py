@@ -6,14 +6,10 @@ from copy import deepcopy
 
 import cv2
 import numpy as np
-try:
-    import pygetwindow as gw
-except ImportError:
-    gw = None
 from PySide6.QtCore import QRectF, Slot, QSignalBlocker
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
-                               QFileDialog, QMessageBox)
+                               QFileDialog, QMessageBox, QSlider)
 
 from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection
 from feature_finder.interface.ui_form import Ui_featureFinder
@@ -70,35 +66,31 @@ class FeatureFinder(QWidget):
         :return: None
         """
         # Sliders
-        self.ui.blob_max_size_slider.sliderReleased.connect(self._update_image)
+        for slider in self.findChildren(QSlider):
+            slider.sliderReleased.connect(self._update_image)
+
         self.ui.blob_max_size_slider.valueChanged.connect(self._change_blob_size_slider)
-        self.ui.blob_min_size_slider.sliderReleased.connect(self._update_image)
         self.ui.blob_min_size_slider.valueChanged.connect(lambda: self._change_blob_size_slider(False))
-        self.ui.circularity_slider.sliderReleased.connect(self._update_image)
-        self.ui.circularity_slider.valueChanged.connect(self._change_circularity_slider)
-        self.ui.feature_max_size_slider.sliderReleased.connect(self._update_image)
+        self.ui.blob_circularity_slider.valueChanged.connect(self._change_circularity_slider)
         self.ui.feature_max_size_slider.valueChanged.connect(self._change_feature_size_slider)
-        self.ui.feature_min_size_slider.sliderReleased.connect(self._update_image)
         self.ui.feature_min_size_slider.valueChanged.connect(lambda: self._change_feature_size_slider(False))
-        self.ui.gauss_blur_slider.sliderReleased.connect(self._update_image)
         self.ui.gauss_blur_slider.valueChanged.connect(self._change_gauss_blur_slider)
-        self.ui.hough_threshold_slider.sliderReleased.connect(self._update_image)
         self.ui.hough_threshold_slider.valueChanged.connect(self._change_hough_threshold_slider)
-        self.ui.pixel_threshold_slider.sliderReleased.connect(self._update_image)
         self.ui.pixel_threshold_slider.valueChanged.connect(self._change_pixel_threshold_slider)
 
         # Spin boxes
+        self.ui.blob_circularity_spin.lineEdit().returnPressed.connect(self._change_circularity_spin)
         self.ui.blob_max_size_spin.lineEdit().returnPressed.connect(self._change_blob_size_spin)
         self.ui.blob_min_size_spin.lineEdit().returnPressed.connect(lambda: self._change_blob_size_spin(False))
-        self.ui.circularity_spin.lineEdit().returnPressed.connect(self._change_circularity_spin)
         self.ui.feature_max_size_spin.lineEdit().returnPressed.connect(self._change_feature_size_spin)
         self.ui.feature_min_size_spin.lineEdit().returnPressed.connect(lambda: self._change_feature_size_spin(False))
         self.ui.gauss_blur_spin.lineEdit().returnPressed.connect(self._change_gauss_blur_spin)
-        self.ui.pixel_threshold_spin.lineEdit().returnPressed.connect(self._change_pixel_threshold_spin)
         self.ui.hough_threshold_spin.lineEdit().returnPressed.connect(self._change_hough_threshold_spin)
+        self.ui.pixel_threshold_spin.lineEdit().returnPressed.connect(self._change_pixel_threshold_spin)
 
         # Buttons / Check boxes
-        self.ui.crosshair_detection_check.clicked.connect(self._change_detection_method)
+        self.ui.circle_fit_check.clicked.connect(self._click_enable_circle_fitting)
+        self.ui.crosshair_fit_check.clicked.connect(self._click_enable_crosshair_fitting)
         self.ui.file_path_browse_button.clicked.connect(self._click_browse_file)
         self.ui.save_image_button.clicked.connect(self._click_save_drawing)
 
@@ -284,21 +276,21 @@ class FeatureFinder(QWidget):
         """
         self.ui.circularity_slider.setValue(self.circularity)
 
-    def _change_detection_method(self):
-        """
-        Change the detection method and update the UI accordingly.
-        
-        :return: None
-        """
-        # Define detector type
-        if self._raw_image.size > 0:
-            if self.rect_detection_status:
-                self.detector = SFRDetection(self._raw_image)
-            else:
-                self.detector = CHDetection(self._raw_image)
-
-        # Update drawing
-        self._update_image()
+    # def _change_detection_method(self):
+    #     """
+    #     Change the detection method and update the UI accordingly.
+    #
+    #     :return: None
+    #     """
+    #     # Define detector type
+    #     if self._raw_image.size > 0:
+    #         if self.rect_detection_status:
+    #             self.detector = SFRDetection(self._raw_image)
+    #         else:
+    #             self.detector = CHDetection(self._raw_image)
+    #
+    #     # Update drawing
+    #     self._update_image()
 
     def _click_browse_file(self):
         """
@@ -344,17 +336,18 @@ class FeatureFinder(QWidget):
             image_array = import_image(selected_file)
 
             if image_array.size > 0:
-                # Set the entry box to the valid image path and log
-                self.ui.file_path_entry.setText(selected_file)
 
                 # Store the image array
                 self._raw_image = image_array
                 self.drawn_image = convert_color_bit(image_array, color_channels=3, out_bit_depth=8)
 
                 # Update UI
+                self.ui.controls_frame.setEnabled(True)
+                self.ui.file_path_entry.setText(selected_file)
+                self.ui.fitting_frame.setEnabled(True)
                 self.ui.save_image_button.setEnabled(True)
 
-                # Init the appropriate detector
+                # TODO: Init the appropriate detector
                 if self.rect_detection_status:
                     self.detector = SFRDetection(self._raw_image)
                 else:
@@ -362,6 +355,24 @@ class FeatureFinder(QWidget):
 
                 # Update the stream window to show imported image
                 self._update_image()
+
+    def _click_enable_circle_fitting(self):
+        """
+        Enable controls if fitting is enabled.
+
+        :return: None
+        """
+        self.ui.circular_tab.setEnabled(self.ui.circle_fit_check.isChecked())
+        self._update_image()
+
+    def _click_enable_crosshair_fitting(self):
+        """
+        Enable controls if fitting is enabled.
+
+        :return: None
+        """
+        self.ui.crosshair_tab.setEnabled(self.ui.crosshair_fit_check.isChecked())
+        self._update_image()
 
     def _click_save_drawing(self):
         """
@@ -436,31 +447,6 @@ class FeatureFinder(QWidget):
         self.raise_()
 
         return msg_box.exec()
-        # # Set local variables
-        # message = bytes(message, 'utf-8')
-        # title = b"Action Required"
-        # icon = 0x40  # info icon
-        # if level == 1:
-        #     title = b"Warning"
-        #     icon = 0x30  # icon exclaim/warning
-        # elif level == 2:
-        #     title = b"ERROR"
-        #     icon = 0x10  # icon stop/error
-        #
-        # # Set widget as active window
-        # try:
-        #     win = gw.getWindowsWithTitle(self.window().windowTitle())[0]
-        #     win.activate()
-        # except (IndexError, RuntimeError):
-        #     self._logger.warning(f"App not open. Could not display dialog: {message}")
-        #     return -1
-        # except gw.PyGetWindowException:
-        #     pass
-        #
-        # # Display dialog message
-        # dialog_answer = ctypes.windll.user32.MessageBoxA(0, message, title, button | icon | 0x00001000)
-        #
-        # return dialog_answer
 
     def _set_defaults(self):
         """
@@ -470,8 +456,8 @@ class FeatureFinder(QWidget):
         """
         settings = self.detection_settings
 
-        self.ui.circularity_slider.setValue(settings.circularity_min * 100)
-        self.ui.circularity_spin.setValue(settings.circularity_min)
+        self.ui.blob_circularity_slider.setValue(settings.circularity_min * 100)
+        self.ui.blob_circularity_spin.setValue(settings.circularity_min)
         self.ui.gauss_blur_slider.setValue(settings.gauss)
         self.ui.gauss_blur_spin.setValue(settings.gauss)
         self.ui.pixel_threshold_slider.setValue(settings.pixel_threshold)
@@ -513,7 +499,8 @@ class FeatureFinder(QWidget):
                                                             self.detection_settings.feature_size[0]))
 
             # Find and draw features/detections
-            self.detector.detect_features(self.feature_size_range, self.blob_size_range, self.circularity)
+            self.detector.detect_features(self.feature_size_range, self.blob_size_range, self.circularity,
+                                          fit_blob=self.ui.circle_fit_check.isChecked())
             self.drawn_image = self.detector.display_image
 
             # Update stored detection settings
