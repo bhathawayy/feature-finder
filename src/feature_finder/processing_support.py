@@ -96,8 +96,10 @@ class DefaultSettings(YamlConfig):
 class FeatureInfo(YamlConfig):
     area: float = Field(default=0.0)
     centroid: tuple = Field(default=(0, 0))
+    height: float = Field(default=0.0)
     shape_type: str = Field(default="NA")
     slope_or_tilt: float = Field(default=0.0)
+    width: float = Field(default=0.0)
 
 
 def check_path(target_path: str, overwrite: bool = True) -> str:

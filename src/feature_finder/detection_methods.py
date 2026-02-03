@@ -36,35 +36,66 @@ class DetectionBase(abc.ABC):
         else:
             raise FileNotFoundError("Improper image input!")
 
-    def _find_blobs(self, contours: list[tuple], blob_range: tuple[float, float], circularity_min: float) \
-            -> tuple[list[FeatureInfo], list[tuple]]:
+    def _find_blobs(self, contours: list[tuple], blob_range: tuple[float, float], circularity_min: float,
+                    fit_blob: bool = True) -> tuple[list[FeatureInfo], list[tuple]]:
         """
         Once contours have found, search for blobs, then draw these on the debug image.
 
-        :param contours: Edges found.
         :param blob_range: Range of acceptable blob areas.
         :param circularity_min: Minimum acceptable blob circularity. The closer to 1, the more "circular".
+        :param contours: Edges found.
+        :param fit_blob: Flag to fit a circle to a blob or not.
         :return: (1) List of features found, and (2) list of remaining non-blob contours.
         """
+
+        def get_centroid(contour_points) -> tuple:
+            m = cv2.moments(contour_points)
+            if m["m00"] != 0:
+                return m["m10"] / m["m00"], m["m01"] / m["m00"]
+            pts = contour.reshape(-1, 2)
+
+            return tuple(pts.mean(axis=0))
+
         non_blob_contours = []
         blobs_found = []
         for contour, approx, contour_area, contour_perimeter in contours:
 
             # Sort according to circularity
             circularity = 4 * np.pi * (contour_area / (contour_perimeter * contour_perimeter))
-            if circularity >= circularity_min and contour_area <= blob_range[1]:
+            if circularity >= circularity_min:
 
                 # Filter based on circle size
                 circle = np.array([pnt[0] for pnt in approx])
                 shape_area = cv2.contourArea(circle)
                 if blob_range[0] <= shape_area <= blob_range[1]:
-                    # Draw shape
-                    xc, yc, rc, sig = circle_fit.least_squares_circle(circle)
-                    center = (int(xc), int(yc))
-                    cv2.circle(self.display_image, center, int(rc), self._color_blob, self._draw_size)
+                    if fit_blob:
+
+                        # Test if ellipse will work better
+                        (cx, cy), (w, h), angle = cv2.fitEllipse(contour)
+
+                        # Define shape
+                        if min(w, h) / max(w, h) > 0.95: # circle case is acceptable
+                            cx, cy, cr, sig = circle_fit.least_squares_circle(circle)
+                            center = (int(cx), int(cy))
+                            cv2.circle(self.display_image, center, int(cr), self._color_blob, self._draw_size)
+                            shape = "circle"
+                            w = h = cr
+                        else:
+                            cv2.ellipse(self.display_image, ((cx, cy), (w, h), angle), self._color_blob,
+                                        self._draw_size)
+                            shape = "ellipse"
+                    else:
+                        cx, cy = get_centroid(contour)
+                        (_, _), (w, h), _ = cv2.fitEllipse(contour)
+                        cv2.drawContours(self.display_image, [approx], 0, self._color_blob, self._draw_size)
+                        shape = "blob"
 
                     # Save to found
-                    blobs_found.append(FeatureInfo(shape_type="blob", area=shape_area, centroid=(xc, yc)))
+                    blobs_found.append(FeatureInfo(shape_type=shape,
+                                                   area=shape_area,
+                                                   width=w,
+                                                   height=h,
+                                                   centroid=(cx, cy)))
 
             else:
                 non_blob_contours.append((contour, approx, contour_area, contour_perimeter))
@@ -95,7 +126,7 @@ class DetectionBase(abc.ABC):
                 approx = cv2.approxPolyDP(contour, 1, True)
                 if draw_contours:
                     cv2.drawContours(self.display_image, [approx], 0, self._color_edge_txt,
-                                     int(self._draw_size / 2))
+                                     min(1, int(self._draw_size / 2)))
 
                 # Save detection info
                 contours_with_info.append((contour, approx, area, perimeter))
@@ -233,14 +264,16 @@ class DetectionBase(abc.ABC):
         return update_next
 
     def detect_features(self, feature_range: tuple[float, float], blob_range: tuple[float, float],
-                        circularity_min: float, draw_contours: bool = False) -> list[FeatureInfo]:
+                        circularity_min: float, draw_contours: bool = False, fit_blob: bool = True,
+                        fit_rect: bool = True, fit_crosshair: bool = True) -> list[FeatureInfo]:
         """
         Detect features i.e. blobs AND rectangular or crosshairs.
 
-        :param feature_range: Allowable feature size range.
         :param blob_range: Allowable blob size range.
         :param circularity_min: Allowable minimum blob circularity.
         :param draw_contours: Flag to draw contours.
+        :param feature_range: Allowable feature size range.
+        :param fit_blob: Flag to fit a circle to a blob or not.
         :return: List of found features.
         """
         # Reset drawn image
@@ -249,7 +282,7 @@ class DetectionBase(abc.ABC):
         # Detect features
         contour_range = (min(blob_range[0], feature_range[0]), max(blob_range[1], feature_range[1]))
         contours = self._find_contours(contour_range, draw_contours=draw_contours)
-        blobs_found, non_blob_contours = self._find_blobs(contours, blob_range, circularity_min)
+        blobs_found, non_blob_contours = self._find_blobs(contours, blob_range, circularity_min, fit_blob=fit_blob)
         features_found = self._find_features(non_blob_contours, feature_range)
 
         # Save all findings for reference
@@ -288,10 +321,12 @@ class SFRDetection(DetectionBase):
                 cv2.drawContours(self.display_image, [box], 0, self._color_rect, self._draw_size)
 
                 # Save to found
-                (cx, cy), (_, _), angle = cv2.minAreaRect(contour)
+                (cx, cy), (w, h), angle = cv2.minAreaRect(contour)
                 features_found.append(FeatureInfo(shape_type="rectangular",
                                                   area=shape_area,
                                                   centroid=(cx, cy),
+                                                  width=w,
+                                                  height=h,
                                                   slope_or_tilt=angle))
 
         return features_found
@@ -328,8 +363,12 @@ class CHDetection(DetectionBase):
                 slope = np.inf if x1 == x2 else abs((y2 - y1) / (x2 - x1))
                 if slope < 1:
                     color = self._color_blob  # horizontal lines
+                    w = line_length
+                    h = 0
                 else:
                     color = self._color_edge_txt  # vertical lines
+                    w = 0
+                    h = line_length
 
                 # Draw shape
                 cv2.line(self.display_image, (x1, y1), (x2, y2), color, self._draw_size)
@@ -337,6 +376,8 @@ class CHDetection(DetectionBase):
                 # Save to found
                 features_found.append(FeatureInfo(shape_type="line",
                                                   area=line_length,
+                                                  width=w,
+                                                  height=h,
                                                   centroid=get_midpoint((x1, y1), (x2, y2)),
                                                   slope_or_tilt=slope))
 
