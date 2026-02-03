@@ -21,7 +21,7 @@ class DetectionBase(abc.ABC):
         self._color_edge_txt: tuple[int, int, int] = (0, 0, 255)  # Color for edges or text [BGR]
         self._color_rect: tuple[int, int, int] = (255, 0, 0)  # Color for rects [BGR]
         self._deviation_cutoff: int = 100
-        self._draw_size: int = 8
+        self._draw_size: int = 6
         self._image_gauss: np.ndarray = np.array([])
         self._image_normal: np.ndarray = np.array([])
         self._image_thresh: np.ndarray = np.array([])
