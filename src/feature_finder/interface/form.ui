@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1004</width>
-    <height>585</height>
+    <height>616</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -66,6 +66,12 @@
           <width>100</width>
           <height>0</height>
          </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>ArrowCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string/>
         </property>
         <property name="text">
          <string>Input File Path:</string>
@@ -127,6 +133,9 @@
           <height>0</height>
          </size>
         </property>
+        <property name="cursor">
+         <cursorShape>ArrowCursor</cursorShape>
+        </property>
         <property name="text">
          <string>Export drawing:</string>
         </property>
@@ -155,8 +164,11 @@
           <height>35</height>
          </size>
         </property>
+        <property name="cursor" stdset="0">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
         <property name="toolTip">
-         <string>Path to input image </string>
+         <string>Enter or select a image path to start detection.</string>
         </property>
         <property name="frameShape">
          <enum>QFrame::Shape::StyledPanel</enum>
@@ -192,8 +204,11 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
         <property name="toolTip">
-         <string>Save the displayed image and data to the provided directory</string>
+         <string>Save the displayed image and data to the provided directory.</string>
         </property>
         <property name="text">
          <string>Save to File...</string>
@@ -220,8 +235,11 @@
           <height>16777215</height>
          </size>
         </property>
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Path browser for input image &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>File browser for image path selection.</string>
         </property>
         <property name="autoFillBackground">
          <bool>false</bool>
@@ -268,9 +286,12 @@
      </property>
      <layout class="QGridLayout" name="gridLayout">
       <item row="1" column="0">
-       <widget class="QCheckBox" name="rectangle_fit_check">
+       <widget class="QCheckBox" name="rect_fit_check">
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
         <property name="toolTip">
-         <string>Toggle for fitting rectangular shape to found contours</string>
+         <string>Toggle for fitting rectangular shapes to found blobs.</string>
         </property>
         <property name="text">
          <string>Enable Rectangular Fitting</string>
@@ -288,16 +309,16 @@
         <property name="currentIndex">
          <number>0</number>
         </property>
-        <widget class="QWidget" name="circular_tab">
+        <widget class="QWidget" name="rect_tab">
          <property name="enabled">
           <bool>false</bool>
          </property>
          <attribute name="title">
-          <string>Circular/Elliptical</string>
+          <string>Rectangular</string>
          </attribute>
-         <layout class="QGridLayout" name="gridLayout_5">
+         <layout class="QGridLayout" name="gridLayout_7">
           <item row="0" column="0">
-           <widget class="QLabel" name="blob_circularity_label">
+           <widget class="QLabel" name="rect_min_size_label">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -310,16 +331,103 @@
               <height>0</height>
              </size>
             </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Minimum allowable rectangular feature size.</string>
+            </property>
             <property name="text">
-             <string>Circularity:</string>
+             <string>Minimum Area:</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
             </property>
            </widget>
           </item>
+          <item row="0" column="2">
+           <widget class="QSpinBox" name="rect_min_size_spin">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string/>
+            </property>
+            <property name="maximum">
+             <number>100000</number>
+            </property>
+            <property name="singleStep">
+             <number>100</number>
+            </property>
+           </widget>
+          </item>
           <item row="0" column="1">
-           <widget class="QSlider" name="blob_circularity_slider">
+           <widget class="QSlider" name="rect_min_size_slider">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>255</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string/>
+            </property>
+            <property name="maximum">
+             <number>100000</number>
+            </property>
+            <property name="singleStep">
+             <number>100</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="rect_max_size_label">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Maximum allowable rectangular feature size.</string>
+            </property>
+            <property name="text">
+             <string>Maximum Area:</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSlider" name="rect_max_size_slider">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -333,7 +441,104 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Circulairty of passable blobs (1 = perfect circle)</string>
+             <string/>
+            </property>
+            <property name="maximum">
+             <number>100000</number>
+            </property>
+            <property name="singleStep">
+             <number>100</number>
+            </property>
+            <property name="value">
+             <number>100000</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QSpinBox" name="rect_max_size_spin">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string/>
+            </property>
+            <property name="maximum">
+             <number>100000</number>
+            </property>
+            <property name="singleStep">
+             <number>100</number>
+            </property>
+            <property name="value">
+             <number>100000</number>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="circular_tab">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <attribute name="title">
+          <string>Circular/Elliptical</string>
+         </attribute>
+         <layout class="QGridLayout" name="gridLayout_5">
+          <item row="0" column="0">
+           <widget class="QLabel" name="circularity_label">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>A circularity closer to 1 means the blob must be more perfectly round for fitting.</string>
+            </property>
+            <property name="text">
+             <string>Circularity:</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QSlider" name="circularity_slider">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>250</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string/>
             </property>
             <property name="minimum">
              <number>10</number>
@@ -356,7 +561,7 @@
            </widget>
           </item>
           <item row="0" column="2">
-           <widget class="QDoubleSpinBox" name="blob_circularity_spin">
+           <widget class="QDoubleSpinBox" name="circularity_spin">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -370,7 +575,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Circulairty of passable blobs (1 = perfect circle)</string>
+             <string/>
             </property>
             <property name="minimum">
              <double>0.100000000000000</double>
@@ -384,7 +589,7 @@
            </widget>
           </item>
           <item row="1" column="0">
-           <widget class="QLabel" name="blob_min_size_label">
+           <widget class="QLabel" name="circular_min_size_label">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -397,8 +602,14 @@
               <height>0</height>
              </size>
             </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Minimum allowable circular feature size.</string>
+            </property>
             <property name="text">
-             <string>Minimum Size:</string>
+             <string>Minimum Area:</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
@@ -406,7 +617,7 @@
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QSlider" name="blob_min_size_slider">
+           <widget class="QSlider" name="circular_min_size_slider">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -420,7 +631,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Minimum allowable blob size used for filtering found contours</string>
+             <string/>
             </property>
             <property name="maximum">
              <number>100000</number>
@@ -434,7 +645,7 @@
            </widget>
           </item>
           <item row="1" column="2">
-           <widget class="QSpinBox" name="blob_min_size_spin">
+           <widget class="QSpinBox" name="circular_min_size_spin">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -448,7 +659,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Minimum allowable blob size used for filtering found contours</string>
+             <string/>
             </property>
             <property name="maximum">
              <number>100000</number>
@@ -459,7 +670,7 @@
            </widget>
           </item>
           <item row="2" column="0">
-           <widget class="QLabel" name="blob_max_size_label">
+           <widget class="QLabel" name="circular_max_size_label">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -472,8 +683,14 @@
               <height>0</height>
              </size>
             </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Maximum allowable circular feature size.</string>
+            </property>
             <property name="text">
-             <string>Maximum Size:</string>
+             <string>Maximum Area:</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
@@ -481,7 +698,7 @@
            </widget>
           </item>
           <item row="2" column="1">
-           <widget class="QSlider" name="blob_max_size_slider">
+           <widget class="QSlider" name="circular_max_size_slider">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -495,7 +712,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Maximum allowable blob size used for filtering found contours</string>
+             <string/>
             </property>
             <property name="maximum">
              <number>100000</number>
@@ -512,7 +729,7 @@
            </widget>
           </item>
           <item row="2" column="2">
-           <widget class="QSpinBox" name="blob_max_size_spin">
+           <widget class="QSpinBox" name="circular_max_size_spin">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -526,7 +743,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Maximum allowable blob size used for filtering found contours</string>
+             <string/>
             </property>
             <property name="maximum">
              <number>100000</number>
@@ -564,7 +781,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Adjust Hough transform thresholding for line detection</string>
+             <string/>
             </property>
             <property name="maximum">
              <number>255</number>
@@ -595,7 +812,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Rotates definition of horizontal and vertical slope sorting</string>
+             <string/>
             </property>
             <property name="minimum">
              <double>-180.000000000000000</double>
@@ -620,7 +837,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Rotates definition of horizontal and vertical slope sorting</string>
+             <string/>
             </property>
             <property name="minimum">
              <number>-180</number>
@@ -654,7 +871,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Adjust Hough transform thresholding for line detection</string>
+             <string/>
             </property>
             <property name="maximum">
              <number>255</number>
@@ -674,6 +891,12 @@
               <width>100</width>
               <height>0</height>
              </size>
+            </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Defines the number of supporting edge points for a shape to be classified as a line.</string>
             </property>
             <property name="text">
              <string>Hough Treshold:</string>
@@ -697,26 +920,106 @@
               <height>0</height>
              </size>
             </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Rotates definition of horizontal and vertical slope sorting.</string>
+            </property>
             <property name="text">
-             <string>Slope TIlt:</string>
+             <string>Slope Tilt:</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
             </property>
            </widget>
           </item>
-          <item row="2" column="0" colspan="4">
-           <spacer name="verticalSpacer">
-            <property name="orientation">
-             <enum>Qt::Orientation::Vertical</enum>
+          <item row="2" column="2">
+           <widget class="QSlider" name="crosshair_min_length_slider">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
             </property>
-            <property name="sizeHint" stdset="0">
+            <property name="minimumSize">
              <size>
-              <width>20</width>
-              <height>5</height>
+              <width>255</width>
+              <height>0</height>
              </size>
             </property>
-           </spacer>
+            <property name="toolTip">
+             <string/>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>100000</number>
+            </property>
+            <property name="singleStep">
+             <number>100</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
+           <widget class="QSpinBox" name="crosshair_min_length_spin">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string/>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>100000</number>
+            </property>
+            <property name="singleStep">
+             <number>100</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0" colspan="2">
+           <widget class="QLabel" name="crosshair_min_length_label">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="cursor">
+             <cursorShape>WhatsThisCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Minimum allowable line length.</string>
+            </property>
+            <property name="text">
+             <string>Minimum Length:</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            </property>
+           </widget>
           </item>
          </layout>
         </widget>
@@ -724,11 +1027,14 @@
       </item>
       <item row="3" column="0">
        <widget class="QCheckBox" name="crosshair_fit_check">
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
         <property name="toolTip">
-         <string>Toggle for fitting crosshair shape to found contours</string>
+         <string>Toggle for fitting crosshair shapes to found lines.</string>
         </property>
         <property name="text">
-         <string>Enable Crossahair Fitting</string>
+         <string>Enable Crosshair Fitting</string>
         </property>
        </widget>
       </item>
@@ -752,9 +1058,12 @@
        </widget>
       </item>
       <item row="2" column="0">
-       <widget class="QCheckBox" name="circle_fit_check">
+       <widget class="QCheckBox" name="circular_fit_check">
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
         <property name="toolTip">
-         <string>Toggle for fitting circular/elliptical shape to found contours</string>
+         <string>Toggle for fitting circular/elliptical shapes to found blobs.</string>
         </property>
         <property name="text">
          <string>Enable Ellipse/Circlular Fitting</string>
@@ -809,7 +1118,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Adjust Gaussian blur kernel size to reduce noise for edge detection</string>
+         <string/>
         </property>
         <property name="minimum">
          <number>1</number>
@@ -837,7 +1146,7 @@
          </font>
         </property>
         <property name="text">
-         <string>Detection Controls</string>
+         <string>Blob Detection</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
@@ -858,6 +1167,12 @@
           <height>0</height>
          </size>
         </property>
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string>Increasing the Gaussian blur kernel size will reduce noise, but decrease edge accuracy.</string>
+        </property>
         <property name="text">
          <string>Gaussian Blur:</string>
         </property>
@@ -867,7 +1182,7 @@
        </widget>
       </item>
       <item row="3" column="2" alignment="Qt::AlignmentFlag::AlignVCenter">
-       <widget class="QSpinBox" name="feature_min_size_spin">
+       <widget class="QSpinBox" name="contour_min_size_spin">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
           <horstretch>0</horstretch>
@@ -881,7 +1196,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Minimum allowable contour size used for filtering found edges</string>
+         <string/>
         </property>
         <property name="maximum">
          <number>100000</number>
@@ -904,6 +1219,15 @@
           <width>100</width>
           <height>0</height>
          </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string>Every pixel with intensity ≥ threshold is set to 255 (white) and every pixel below is set to 0 (black).</string>
+        </property>
+        <property name="whatsThis">
+         <string/>
         </property>
         <property name="text">
          <string>Pixel Threshold:</string>
@@ -928,7 +1252,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Adjust pixel value thresholding for edge detection</string>
+         <string/>
         </property>
         <property name="maximum">
          <number>255</number>
@@ -948,7 +1272,7 @@
        </widget>
       </item>
       <item row="4" column="2" alignment="Qt::AlignmentFlag::AlignVCenter">
-       <widget class="QSpinBox" name="feature_max_size_spin">
+       <widget class="QSpinBox" name="contour_max_size_spin">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
           <horstretch>0</horstretch>
@@ -962,7 +1286,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Maximum allowable contour size used for filtering found edges</string>
+         <string/>
         </property>
         <property name="maximum">
          <number>100000</number>
@@ -990,7 +1314,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Adjust Gaussian blur kernel size to reduce noise for edge detection</string>
+         <string/>
         </property>
         <property name="minimum">
          <number>1</number>
@@ -1016,7 +1340,7 @@
        </widget>
       </item>
       <item row="4" column="1" alignment="Qt::AlignmentFlag::AlignVCenter">
-       <widget class="QSlider" name="feature_max_size_slider">
+       <widget class="QSlider" name="contour_max_size_slider">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
           <horstretch>0</horstretch>
@@ -1030,7 +1354,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Maximum allowable contour size used for filtering found edges</string>
+         <string/>
         </property>
         <property name="maximum">
          <number>100000</number>
@@ -1047,7 +1371,7 @@
        </widget>
       </item>
       <item row="4" column="0" alignment="Qt::AlignmentFlag::AlignVCenter">
-       <widget class="QLabel" name="feature_max_size_label">
+       <widget class="QLabel" name="contour_max_size_label">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
           <horstretch>0</horstretch>
@@ -1060,8 +1384,14 @@
           <height>0</height>
          </size>
         </property>
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string>Maximum allowable blob size used for filtering out detections.</string>
+        </property>
         <property name="text">
-         <string>Maximum Size:</string>
+         <string>Maximum Area:</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
@@ -1069,7 +1399,7 @@
        </widget>
       </item>
       <item row="3" column="1" alignment="Qt::AlignmentFlag::AlignVCenter">
-       <widget class="QSlider" name="feature_min_size_slider">
+       <widget class="QSlider" name="contour_min_size_slider">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
           <horstretch>0</horstretch>
@@ -1083,7 +1413,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Minimum allowable contour size used for filtering found edges</string>
+         <string/>
         </property>
         <property name="maximum">
          <number>100000</number>
@@ -1097,7 +1427,7 @@
        </widget>
       </item>
       <item row="3" column="0" alignment="Qt::AlignmentFlag::AlignVCenter">
-       <widget class="QLabel" name="feature_min_size_label">
+       <widget class="QLabel" name="contour_min_size_label">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
           <horstretch>0</horstretch>
@@ -1110,8 +1440,14 @@
           <height>0</height>
          </size>
         </property>
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string>Minimum allowable blob size used for filtering out detections.</string>
+        </property>
         <property name="text">
-         <string>Minimum Size:</string>
+         <string>Minimum Area:</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
@@ -1133,12 +1469,105 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>Adjust pixel value thresholding for edge detection</string>
+         <string/>
         </property>
         <property name="maximum">
          <number>255</number>
         </property>
         <property name="singleStep">
+         <number>1</number>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="distance_interval_label">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>100</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>WhatsThisCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string>Minimum distance allowed between detected features.</string>
+        </property>
+        <property name="text">
+         <string>Distance Interval:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QSlider" name="distance_interval_slider">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>250</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string/>
+        </property>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>100000</number>
+        </property>
+        <property name="singleStep">
+         <number>100</number>
+        </property>
+        <property name="value">
+         <number>1</number>
+        </property>
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="2">
+       <widget class="QSpinBox" name="distance_interval_spin">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>100</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string/>
+        </property>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>100000</number>
+        </property>
+        <property name="singleStep">
+         <number>100</number>
+        </property>
+        <property name="value">
          <number>1</number>
         </property>
        </widget>
@@ -1181,6 +1610,9 @@
        <width>471</width>
        <height>411</height>
       </size>
+     </property>
+     <property name="cursor" stdset="0">
+      <cursorShape>CrossCursor</cursorShape>
      </property>
      <property name="focusPolicy">
       <enum>Qt::FocusPolicy::NoFocus</enum>
