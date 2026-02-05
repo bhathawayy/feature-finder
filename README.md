@@ -1,6 +1,6 @@
 # FeatureFinder
 
-A Python GUI application for computer vision feature detection. FeatureFinder provides an intuitive interface to detect and analyze blobs, rectangular shapes, and cross-hairs in images using OpenCV.
+A Python GUI application for computer vision feature detection on WIndows, Mac, and Linux. FeatureFinder provides an intuitive interface to detect and analyze blobs, rectangular shapes, and cross-hairs in images using OpenCV.
 
 ## Features
 
