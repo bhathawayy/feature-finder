@@ -1,22 +1,20 @@
-import ctypes
 import logging
 import math
 import os
 import sys
-from copy import deepcopy
+import yaml
+from typing import Any, Callable
 
 import cv2
 import numpy as np
-import pygetwindow as gw
-import winsound
 from PySide6.QtCore import QRectF, Slot, QSignalBlocker
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
-                               QFileDialog)
+                               QFileDialog, QMessageBox, QSlider, QSpinBox, QDoubleSpinBox, QAbstractSpinBox)
 
-from feature_finder.detection_methods import DetectionBase, SFRDetection, CHDetection
+from feature_finder.data_objects import DefaultSettings
+from feature_finder.data_processing import convert_color_bit, check_path, DetectionBase
 from feature_finder.interface.ui_form import Ui_featureFinder
-from feature_finder.processing_support import convert_color_bit, check_path, DefaultSettings
 
 
 class FeatureFinder(QWidget):
@@ -69,235 +67,104 @@ class FeatureFinder(QWidget):
         :return: None
         """
         # Sliders
-        self.ui.blob_max_size_slider.sliderReleased.connect(self._update_image)
-        self.ui.blob_max_size_slider.valueChanged.connect(self._change_blob_size_slider)
-        self.ui.blob_min_size_slider.sliderReleased.connect(self._update_image)
-        self.ui.blob_min_size_slider.valueChanged.connect(lambda: self._change_blob_size_slider(False))
-        self.ui.circularity_slider.sliderReleased.connect(self._update_image)
-        self.ui.circularity_slider.valueChanged.connect(self._change_circularity_slider)
-        self.ui.feature_max_size_slider.sliderReleased.connect(self._update_image)
-        self.ui.feature_max_size_slider.valueChanged.connect(self._change_feature_size_slider)
-        self.ui.feature_min_size_slider.sliderReleased.connect(self._update_image)
-        self.ui.feature_min_size_slider.valueChanged.connect(lambda: self._change_feature_size_slider(False))
-        self.ui.gauss_blur_slider.sliderReleased.connect(self._update_image)
-        self.ui.gauss_blur_slider.valueChanged.connect(self._change_gauss_blur_slider)
-        self.ui.hough_threshold_slider.sliderReleased.connect(self._update_image)
-        self.ui.hough_threshold_slider.valueChanged.connect(self._change_hough_threshold_slider)
-        self.ui.pixel_threshold_slider.sliderReleased.connect(self._update_image)
-        self.ui.pixel_threshold_slider.valueChanged.connect(self._change_pixel_threshold_slider)
+        for slider in self.findChildren(QSlider):
+            slider_name = slider.objectName().lower()
+            slider.sliderReleased.connect(self._update_image)
+            if ("_max" in slider_name or "_min" in slider_name) and "crosshair" not in slider_name:
+                slider.valueChanged.connect(self._change_range_slider_or_spin)
+            else:
+                slider.valueChanged.connect(self._change_slider)
 
         # Spin boxes
-        self.ui.blob_max_size_spin.lineEdit().returnPressed.connect(self._change_blob_size_spin)
-        self.ui.blob_min_size_spin.lineEdit().returnPressed.connect(lambda: self._change_blob_size_spin(False))
-        self.ui.circularity_spin.lineEdit().returnPressed.connect(self._change_circularity_spin)
-        self.ui.feature_max_size_spin.lineEdit().returnPressed.connect(self._change_feature_size_spin)
-        self.ui.feature_min_size_spin.lineEdit().returnPressed.connect(lambda: self._change_feature_size_spin(False))
-        self.ui.gauss_blur_spin.lineEdit().returnPressed.connect(self._change_gauss_blur_spin)
-        self.ui.pixel_threshold_spin.lineEdit().returnPressed.connect(self._change_pixel_threshold_spin)
-        self.ui.hough_threshold_spin.lineEdit().returnPressed.connect(self._change_hough_threshold_spin)
+        for spin_box in self.findChildren(QAbstractSpinBox):
+            spin_box_name = spin_box.objectName().lower()
+            if "_max" in spin_box_name or "_min" in spin_box_name:
+                spin_box.lineEdit().returnPressed.connect(self._change_range_slider_or_spin)
+
+        spin_box_to_property_map = {
+            self.ui.circularity_spin: self.circularity_min,
+            self.ui.crosshair_min_length_spin: self.crosshair_min_length,
+            self.ui.crosshair_slope_tilt_spin: self.crosshair_slope_tilt,
+            self.ui.distance_interval_spin: self.crosshair_distance,
+            self.ui.gauss_blur_spin: self.gauss_blur_kernel,
+            self.ui.hough_threshold_spin: self.crosshair_hough_threshold,
+            self.ui.pixel_threshold_spin: self.pixel_threshold
+        }
+        for spin_box in spin_box_to_property_map:
+            spin_box.lineEdit().returnPressed.connect(
+                lambda: self._change_spin(spin_box, lambda: spin_box_to_property_map[spin_box]))
 
         # Buttons / Check boxes
-        self.ui.crosshair_detection_check.clicked.connect(self._change_detection_method)
+        self.ui.elliptical_fit_check.clicked.connect(self._click_enable_circle_fitting)
+        self.ui.crosshair_fit_check.clicked.connect(self._click_enable_crosshair_fitting)
         self.ui.file_path_browse_button.clicked.connect(self._click_browse_file)
+        self.ui.rect_fit_check.clicked.connect(self._click_enable_rectangular_fitting)
         self.ui.save_image_button.clicked.connect(self._click_save_drawing)
 
-    def _change_blob_size_slider(self, is_max_widget: bool = True):
+    def _change_range_slider_or_spin(self):
         """
-        Update the blob size slider value and image when the spin box changes.
-        
-        :param is_max_widget: Is max or min slider?
+        Update the toggled widget and any bonded widgets.
+
         :return: None
         """
-        if is_max_widget:
-            new_val = self.ui.blob_max_size_slider.value()
-            min_val = self.ui.blob_min_size_slider.value()
+        # Define local variables
+        toggled_widget, slider, spin_box = self._get_bonded_widget()
+        if toggled_widget is None:
+            return
+        widget_name = toggled_widget.objectName().lower()
+        new_val = toggled_widget.value()
+
+        # Ensure range sliders react correctly to each other
+        slider_min = self.ui.__getattribute__(slider.objectName().lower().replace("_max", "_min"))
+        slider_max = self.ui.__getattribute__(slider.objectName().lower().replace("_min", "_max"))
+        if "max" in widget_name:
+            min_val = slider_min.value()
             if new_val <= min_val:
                 new_val = min_val + 1
-                with QSignalBlocker(self.ui.blob_max_size_slider):
-                    self.ui.blob_max_size_slider.setValue(new_val)
-            spin_handle = self.ui.blob_max_size_spin
+                with QSignalBlocker(toggled_widget):
+                    toggled_widget.setValue(new_val)
         else:
-            new_val = self.ui.blob_min_size_slider.value()
-            max_val = self.ui.blob_max_size_slider.value()
+            max_val = slider_max.value()
             if new_val >= max_val:
                 new_val = max_val - 1
-                with QSignalBlocker(self.ui.blob_min_size_slider):
-                    self.ui.blob_min_size_slider.setValue(new_val)
-            spin_handle = self.ui.blob_min_size_spin
-        with QSignalBlocker(spin_handle):
-            spin_handle.setValue(new_val)
-        self._update_image()
+                with QSignalBlocker(toggled_widget):
+                    toggled_widget.setValue(new_val)
 
-    def _change_blob_size_spin(self, is_max_widget: bool = True):
-        """
-        Update the blob size spin box value and image when the slider changes.
-
-        :param is_max_widget: Is max or min spin box?
-        :return: None
-        """
-        if is_max_widget:
-            new_val = self.ui.blob_max_size_spin.value()
-            min_val = self.ui.blob_min_size_slider.value()
-            if new_val <= min_val:
-                new_val = min_val + 1
-                with QSignalBlocker(self.ui.blob_max_size_spin):
-                    self.ui.blob_max_size_spin.setValue(new_val)
-            slider_handle = self.ui.blob_max_size_slider
+        # Set bonded widget to new value
+        if "_slider" in widget_name:
+            with QSignalBlocker(spin_box):
+                spin_box.setValue(new_val)
         else:
-            new_val = self.ui.blob_min_size_spin.value()
-            max_val = self.ui.blob_max_size_slider.value()
-            if new_val >= max_val:
-                new_val = max_val - 1
-                with QSignalBlocker(self.ui.blob_min_size_spin):
-                    self.ui.blob_min_size_spin.setValue(new_val)
-            slider_handle = self.ui.blob_min_size_slider
-        slider_handle.setValue(new_val)
+            slider.setValue(new_val)
+
+        # Update image for any changes
         self._update_image()
 
-    def _change_feature_size_slider(self, is_max_widget: bool = True):
+    def _change_slider(self):
         """
-        Update the feature size slider value and image when the spin box changes.
+        Action for changing a slider widget.
 
-        :param is_max_widget: Is max or min slider?
         :return: None
         """
-        if is_max_widget:
-            new_val = self.ui.feature_max_size_slider.value()
-            min_val = self.ui.feature_min_size_slider.value()
-            if new_val <= min_val:
-                new_val = min_val + 1
-                with QSignalBlocker(self.ui.feature_max_size_slider):
-                    self.ui.feature_max_size_slider.setValue(new_val)
-            spin_handle = self.ui.feature_max_size_spin
-        else:
-            new_val = self.ui.feature_min_size_slider.value()
-            max_val = self.ui.feature_max_size_slider.value()
-            if new_val >= max_val:
-                new_val = max_val - 1
-                with QSignalBlocker(self.ui.feature_min_size_slider):
-                    self.ui.feature_min_size_slider.setValue(new_val)
-            spin_handle = self.ui.feature_min_size_spin
-        with QSignalBlocker(spin_handle):
-            spin_handle.setValue(new_val)
+        toggled_widget, slider, spin_box = self._get_bonded_widget()
+        new_val = toggled_widget.value()
+        with QSignalBlocker(spin_box):
+            if "circularity" in spin_box.objectName().lower():
+                new_val *= 1 / 100
+            spin_box.setValue(new_val)
         self._update_image()
 
-    def _change_feature_size_spin(self, is_max_widget: bool = True):
+    def _change_spin(self, toggled_widget: QSpinBox, property_call: Callable):
         """
-        Update the feature size spin box value and image when the slider changes.
+        Action for changing a spin-box widget.
 
-        :param is_max_widget: Is max or min spin box?
+        :param toggled_widget: Toggled spin-box (self.sender() doesn't work with lambda)
+        :param property_call: Handle to property call.
         :return: None
         """
-        if is_max_widget:
-            new_val = self.ui.feature_max_size_spin.value()
-            min_val = self.ui.feature_min_size_slider.value()
-            if new_val <= min_val:
-                new_val = min_val + 1
-                with QSignalBlocker(self.ui.feature_max_size_spin):
-                    self.ui.feature_max_size_spin.setValue(new_val)
-            slider_handle = self.ui.feature_max_size_slider
-        else:
-            new_val = self.ui.feature_min_size_spin.value()
-            max_val = self.ui.feature_max_size_slider.value()
-            if new_val >= max_val:
-                new_val = max_val - 1
-                with QSignalBlocker(self.ui.feature_min_size_spin):
-                    self.ui.feature_min_size_spin.setValue(new_val)
-            slider_handle = self.ui.feature_min_size_slider
-        slider_handle.setValue(new_val)
-        self._update_image()
-
-    def _change_gauss_blur_slider(self):
-        """
-        Update the Gaussian blur spin box value and image when the slider changes.
-        
-        :return: None
-        """
-        new_val = self.ui.gauss_blur_slider.value()
-        with QSignalBlocker(self.ui.gauss_blur_spin):
-            self.ui.gauss_blur_spin.setValue(new_val)
-        self._update_image()
-
-    def _change_gauss_blur_spin(self):
-        """
-        Update the Gaussian blur slider value when the spin box changes.
-        
-        :return: None
-        """
-        self.ui.gauss_blur_slider.setValue(self.gauss_blur)
-
-    def _change_hough_threshold_slider(self):
-        """
-        Update the Hough threshold spin box value and image when the slider changes.
-
-        :return: None
-        """
-        new_val = self.ui.hough_threshold_slider.value()
-        with QSignalBlocker(self.ui.hough_threshold_spin):
-            self.ui.hough_threshold_spin.setValue(new_val)
-        self._update_image()
-
-    def _change_hough_threshold_spin(self):
-        """
-        Update the Hough threshold slider value when the spin box changes.
-
-        :return: None
-        """
-        self.ui.hough_threshold_slider.setValue(self.hough_threshold)
-
-    def _change_pixel_threshold_slider(self):
-        """
-        Update the threshold spin box value and image when the slider changes.
-        
-        :return: None
-        """
-        new_val = self.ui.pixel_threshold_slider.value()
-        with QSignalBlocker(self.ui.pixel_threshold_spin):
-            self.ui.pixel_threshold_spin.setValue(new_val)
-        self._update_image()
-
-    def _change_pixel_threshold_spin(self):
-        """
-        Update the threshold slider value when the spin box changes.
-        
-        :return: None
-        """
-        self.ui.pixel_threshold_slider.setValue(self.pixel_threshold)
-
-    def _change_circularity_slider(self):
-        """
-        Update the circularity spin box value and image when the slider changes.
-        
-        :return: None
-        """
-        new_val = self.ui.circularity_slider.value()
-        with QSignalBlocker(self.ui.circularity_spin):
-            self.ui.circularity_spin.setValue(new_val / 100)
-        self._update_image()
-
-    def _change_circularity_spin(self):
-        """
-        Update the circularity slider value when the spin box changes.
-        
-        :return: None
-        """
-        self.ui.circularity_slider.setValue(self.circularity)
-
-    def _change_detection_method(self):
-        """
-        Change the detection method and update the UI accordingly.
-        
-        :return: None
-        """
-        # Define detector type
-        if self._raw_image.size > 0:
-            if self.rect_detection_status:
-                self.detector = SFRDetection(self._raw_image)
-            else:
-                self.detector = CHDetection(self._raw_image)
-
-        # Update drawing
-        self._update_image()
+        widget_name = toggled_widget.objectName().lower()
+        slider = self.ui.__getattribute__(widget_name.replace("_spin", "_slider"))
+        slider.setValue(int(getattr(self, property_call())))
 
     def _click_browse_file(self):
         """
@@ -313,13 +180,24 @@ class FeatureFinder(QWidget):
             :param file_path: Path to the image file
             :return: Numpy array containing the image data
             """
+            ok = False
+            rgb_image = np.array([])
+
+            # Try to import image
             if os.path.isfile(file_path):
                 raw_array = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
-                rgb8_image = convert_color_bit(raw_array, color_channels=3, out_bit_depth=8)
-            else:
-                rgb8_image = np.array([])
+                if raw_array.size > 0 and raw_array is not None:
+                    rgb_image = convert_color_bit(raw_array, color_channels=3, out_bit_depth=8)
+                    ok = True
 
-            return rgb8_image
+            # Case for bad path
+            if ok:
+                self._logger.info(f"Imported image at: {file_path}")
+            else:
+                self._dialog_and_log(f"Invalid file selected!\n\nPlease check the file path and integrity at: "
+                                     f"{file_path}", level=2)
+
+            return rgb_image
 
         # Setup file browser dialog box
         file_dialog = QFileDialog(self)
@@ -330,29 +208,50 @@ class FeatureFinder(QWidget):
         if file_dialog.exec():
             selected_file = file_dialog.selectedFiles()[0]
             image_array = import_image(selected_file)
-            if image_array.size > 0:
-                # Set the entry box to the valid image path and log
-                self.ui.file_path_entry.setText(selected_file)
-                self._logger.info(f"Imported image at: {selected_file}")
 
+            if image_array.size > 0:
                 # Store the image array
                 self._raw_image = image_array
                 self.drawn_image = convert_color_bit(image_array, color_channels=3, out_bit_depth=8)
 
                 # Update UI
+                self.ui.controls_frame.setEnabled(True)
+                self.ui.file_path_entry.setText(selected_file)
+                self.ui.fitting_frame.setEnabled(True)
                 self.ui.save_image_button.setEnabled(True)
 
-                # Init the appropriate detector
-                if self.rect_detection_status:
-                    self.detector = SFRDetection(self._raw_image)
-                else:
-                    self.detector = CHDetection(self._raw_image)
+                # TODO: Init the appropriate detector
+                self.detector = DetectionBase(self._raw_image)
 
                 # Update the stream window to show imported image
                 self._update_image()
-            else:
-                self._dialog("Invalid file selected!\n\nPlease check the file path and integrity.", level=1)
-                self._logger.warning(f"Ignoring invalid image at {selected_file}")
+
+    def _click_enable_circle_fitting(self):
+        """
+        Enable controls if fitting is enabled.
+
+        :return: None
+        """
+        self.ui.elliptical_tab.setEnabled(self.ui.elliptical_fit_check.isChecked())
+        self._update_image()
+
+    def _click_enable_crosshair_fitting(self):
+        """
+        Enable controls if fitting is enabled.
+
+        :return: None
+        """
+        self.ui.crosshair_tab.setEnabled(self.ui.crosshair_fit_check.isChecked())
+        self._update_image()
+
+    def _click_enable_rectangular_fitting(self):
+        """
+        Enable controls if fitting is enabled.
+
+        :return: None
+        """
+        self.ui.rect_tab.setEnabled(self.ui.rect_fit_check.isChecked())
+        self._update_image()
 
     def _click_save_drawing(self):
         """
@@ -366,6 +265,7 @@ class FeatureFinder(QWidget):
 
             # Attempt to save the image
             if self.drawn_image.size > 0:
+
                 # Check the image path
                 checked_path = check_path(file_path)
                 checked_dir = os.path.dirname(checked_path)
@@ -385,47 +285,73 @@ class FeatureFinder(QWidget):
 
                 # Save YAML files
                 self.detection_settings.to_yaml(os.path.join(checked_dir, "detection_settings.yaml"))
-                for f, feature in enumerate(self.detector.found_features):
-                    write_mode = "w" if f == 0 else "a"
-                    feature.to_yaml(os.path.join(checked_dir, "found_features.yaml"), write_mode=write_mode)
+                with open(os.path.join(checked_dir, "found_features.yaml"), "w") as f:
+                    features_dict = {}
+                    for idx, feature in enumerate(self.detector.found_features):
+                        feature_data = vars(feature).copy()
+                        if isinstance(feature_data.get('centroid'), tuple):
+                            feature_data['centroid'] = list(feature_data['centroid'])  # convert tuples to lists
+                        features_dict[f"feature_{idx}"] = feature_data
+                    yaml.dump(features_dict, f, default_flow_style=False, sort_keys=False)
                 self._logger.info(f"YAML files saved to: {file_path}")
 
-    def _dialog(self, message: str, button: hex = 0x0, level: int = 0) -> int:
+    def _dialog_and_log(self, message: str, button: int = 0, level: int = 0,
+                        err_handle: Exception | None = None) -> int:
         """
         Display a dialog box with the given message.
 
         :param message: Message to display in the dialog box
-        :param button: Button options (0x0 = OK, 0x01 = OK/CANCEL, 0x03 = YES/NO/CANCEL, 0x04 = YES/NO)
+        :param button: Button options (default = OK, 1 = OK/CANCEL, 3 = YES/NO/CANCEL, 4 = YES/NO)
         :param level: Dialog level (0 = prompt, 1 = warning, 2 = error)
         :return: User's response to the dialog.
         """
-        # Set local variables
-        message = bytes(message, 'utf-8')
-        title = b"Action Required"
-        icon = 0x40  # info icon
+        # Set title and icon based on level
+        msg_box = QMessageBox(self)
+        msg_box.setText(message)
         if level == 1:
-            title = b"Warning"
-            icon = 0x30  # icon exclaim/warning
+            msg_box.setWindowTitle("Warning")
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            self._logger.warning(message)
         elif level == 2:
-            title = b"ERROR"
-            icon = 0x10  # icon stop/error
+            msg_box.setWindowTitle("ERROR")
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            self._logger.error(f"{message}\n\n{str(err_handle)}")
+        else:
+            msg_box.setWindowTitle("Action Required")
+            msg_box.setIcon(QMessageBox.Icon.Information)
 
-        # Set widget as active window
-        try:
-            win = gw.getWindowsWithTitle(self.window().windowTitle())[0]
-            win.activate()
-        except (IndexError, RuntimeError):
-            self._logger.warning(f"App not open. Could not display dialog: {message}")
-            return -1
-        except gw.PyGetWindowException:
-            pass
+        # Set buttons based on button parameter
+        button_map = {
+            1: QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            3: QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+            4: QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        }
+        msg_box.setStandardButtons(button_map.get(button, QMessageBox.StandardButton.Ok))
 
-        # Display dialog message
-        if level != 2:
-            winsound.Beep(800, 500)
-        dialog_answer = ctypes.windll.user32.MessageBoxA(0, message, title, button | icon | 0x00001000)
+        # Activate window (cross-platform)
+        self.activateWindow()
+        self.raise_()
 
-        return dialog_answer
+        return msg_box.exec()
+
+    def _get_bonded_widget(self) -> tuple[
+        QWidget | QSlider | QSpinBox | QDoubleSpinBox, QSlider, QSpinBox | QDoubleSpinBox]:
+        """
+        Get the bonded widget i.e. slider if spin-box, or spin-box if slider.
+
+        :return: (1) Toggled widget, (2) slider handle, and (3) spin-box handle.
+        """
+        # Handle case where sender is a line edit within a spin box
+        toggled_widget = self.sender()
+        if hasattr(toggled_widget, 'parent') and isinstance(toggled_widget.parent(), QSpinBox):
+            toggled_widget = toggled_widget.parent()
+
+        # Get widget handles
+        widget_name = toggled_widget.objectName().lower()
+        slider = self.ui.__getattribute__(widget_name.replace("_spin", "_slider"))
+        spin_box = self.ui.__getattribute__(widget_name.replace("_slider", "_spin"))
+
+        return toggled_widget, slider, spin_box
 
     def _set_defaults(self):
         """
@@ -433,14 +359,41 @@ class FeatureFinder(QWidget):
         
         :return: None
         """
+
+        def set_widget_value(widget_family_member: QWidget, setting_handle: Any, float_slider_factor: float = 1):
+
+            def get_target_name(widget_name: str, target: str, option: str) -> str:
+                return widget_name if target in widget_name else widget_name.replace(option, target)
+
+            def set_value(widget_name: str, new_value: Any):
+                if "slider" in widget_name:
+                    self.ui.__getattribute__(widget_name).setValue(new_value * float_slider_factor)
+                else:
+                    self.ui.__getattribute__(widget_name).setValue(new_value)
+
+            def set_min_and_max(widget_name: str):
+                set_value(get_target_name(widget_name, "min", "max"), setting_handle[0])
+                set_value(get_target_name(widget_name, "max", "min"), setting_handle[1])
+
+            if isinstance(setting_handle, tuple):
+                set_min_and_max(get_target_name(widget_family_member.objectName(), "slider", "spin"))
+                set_min_and_max(get_target_name(widget_family_member.objectName(), "spin", "slider"))
+            else:
+                set_value(get_target_name(widget_family_member.objectName(), "slider", "spin"), setting_handle)
+                set_value(get_target_name(widget_family_member.objectName(), "spin", "slider"), setting_handle)
+
         settings = self.detection_settings
 
-        self.ui.circularity_slider.setValue(settings.circularity_min * 100)
-        self.ui.circularity_spin.setValue(settings.circularity_min)
-        self.ui.gauss_blur_slider.setValue(settings.gauss)
-        self.ui.gauss_blur_spin.setValue(settings.gauss)
-        self.ui.pixel_threshold_slider.setValue(settings.pixel_threshold)
-        self.ui.pixel_threshold_spin.setValue(settings.pixel_threshold)
+        set_widget_value(self.ui.distance_interval_slider, settings.crosshair_distance)
+        set_widget_value(self.ui.feature_max_size_slider, settings.feature_size_range)
+        set_widget_value(self.ui.gauss_blur_slider, settings.gauss_blur_kernel)
+        set_widget_value(self.ui.pixel_threshold_slider, settings.pixel_threshold)
+        set_widget_value(self.ui.elliptical_max_size_slider, settings.feature_size_range)
+        set_widget_value(self.ui.circularity_spin, settings.circularity_min, 100)
+        set_widget_value(self.ui.hough_threshold_spin, settings.crosshair_hough_threshold)
+        set_widget_value(self.ui.crosshair_min_length_spin, settings.crosshair_min_length)
+        set_widget_value(self.ui.crosshair_slope_tilt_spin, settings.crosshair_slope_tilt)
+        set_widget_value(self.ui.rect_max_size_slider, settings.feature_size_range)
 
     def _startup(self):
         """
@@ -465,41 +418,63 @@ class FeatureFinder(QWidget):
         """
         if self._raw_image.size > 0:
             # Pre-process image
-            update_next = self.detector.apply_gauss_blur(self.gauss_blur, update=(self.gauss_blur !=
-                                                                                  self.detection_settings.gauss))
-            update_next = self.detector.apply_threshold(self.pixel_threshold,
-                                                        update=(update_next or self.pixel_threshold !=
-                                                                self.detection_settings.pixel_threshold))
-            if not self.rect_detection_status:
-                self.detector.apply_hough_transform(self.hough_threshold, self.feature_size_range[0],
-                                                    update=(update_next or self.hough_threshold !=
-                                                            self.detection_settings.hough_threshold or
-                                                            self.feature_size_range[0] !=
-                                                            self.detection_settings.feature_size[0]))
+            update_next = self.detector.apply_gauss_blur(
+                self.gauss_blur_kernel,
+                update=(self.gauss_blur_kernel != self.detection_settings.gauss_blur_kernel)
+            )
+            update_next = self.detector.apply_threshold(
+                self.pixel_threshold,
+                update=(update_next or self.pixel_threshold != self.detection_settings.pixel_threshold)
+            )
+            if self.ui.crosshair_fit_check.isChecked():
+                self.detector.apply_hough_transform(
+                    self.crosshair_hough_threshold,
+                    self.crosshair_distance,
+                    self.crosshair_min_length,
+                    update=(update_next or self.crosshair_hough_threshold !=
+                            self.detection_settings.crosshair_hough_threshold or
+                            self.crosshair_min_length != self.detection_settings.crosshair_min_length))
 
-            # Find and draw features/detections
-            self.detector.detect_features(self.feature_size_range, self.blob_size_range, self.circularity)
+            # Find and draw contours/detections
+            self.detector.detect_features(
+                self.feature_size_range,
+                self.elliptical_size_range,
+                self.rectangular_size_range,
+                self.circularity_min,
+                self.crosshair_slope_tilt,
+                fit_ellipse=self.ui.elliptical_fit_check.isChecked(),
+                fit_rect=self.ui.rect_fit_check.isChecked(),
+                fit_crosshair=self.ui.crosshair_fit_check.isChecked()
+            )
             self.drawn_image = self.detector.display_image
 
-            # Update stored detection settings
-            self.detection_settings.blob_size = deepcopy(self.blob_size_range)
-            self.detection_settings.circularity_min = deepcopy(self.circularity)
-            self.detection_settings.feature_size = deepcopy(self.feature_size_range)
-            self.detection_settings.gauss = deepcopy(self.gauss_blur)
-            self.detection_settings.hough_threshold = deepcopy(self.hough_threshold)
-            self.detection_settings.pixel_threshold = deepcopy(self.pixel_threshold)
-
-            # Log settings
-            self._logger.info(f"Updated image with settings:\n"
-                              f"\tblob size = {self.detection_settings.blob_size}"
-                              f"\tcircularity = {self.detection_settings.circularity_min}"
-                              f"\tfeature size = {self.detection_settings.feature_size}"
-                              f"\tgauss kernel = {self.detection_settings.gauss}"
-                              f"\though threshold = {self.detection_settings.hough_threshold}"
-                              f"\tpixel threshold = {self.detection_settings.pixel_threshold}")
+            # Update & log settings
+            self._update_stored_settings()
+            self._logger.info(
+                f"Updated image with settings:\n"
+                f"\tcircularity = {self.detection_settings.circularity_min}"
+                f"\tcrosshair distance = {self.detection_settings.crosshair_distance}"
+                f"\tcrosshair min. length = {self.detection_settings.crosshair_min_length}"
+                f"\tcrosshair slope tilt = {self.detection_settings.crosshair_slope_tilt}"
+                f"\telliptical size range = {self.detection_settings.elliptical_size_range}"
+                f"\tfeature size range = {self.detection_settings.feature_size_range}"
+                f"\tgauss blur kernel = {self.detection_settings.gauss_blur_kernel}"
+                f"\though threshold = {self.detection_settings.crosshair_hough_threshold}"
+                f"\tpixel threshold = {self.detection_settings.pixel_threshold}"
+                f"\trectangular size range = {self.detection_settings.rectangular_size_range}"
+            )
 
             # Update stream window
             self._update_stream_window()
+
+    def _update_stored_settings(self):
+        """
+        Update stored settings based on UI.
+
+        :return: None
+        """
+        for setting in self.detection_settings.__dict__:
+            self.detection_settings.__setattr__(setting, self.__getattribute__(setting))
 
     def _update_stream_window(self):
         """
@@ -513,7 +488,7 @@ class FeatureFinder(QWidget):
             self._display.on_image_received(q_image)
 
     @property
-    def circularity(self) -> float:
+    def circularity_min(self) -> float:
         """
         Selected circularity limit for blob detection.
 
@@ -522,31 +497,61 @@ class FeatureFinder(QWidget):
         return float(self.ui.circularity_spin.value())
 
     @property
-    def blob_size_range(self) -> tuple[float, float]:
+    def crosshair_hough_threshold(self) -> int:
         """
-        Selected range of detected blob sizes.
+        Selected Hough line threshold value.
 
-        :return: Blob size range.
+        :return: Threshold value.
         """
-        min_size = self.ui.blob_min_size_slider.value()
-        max_size = self.ui.blob_max_size_slider.value()
+        return int(self.ui.hough_threshold_spin.value())
 
-        return min_size * self.range_size_factor, max_size * self.range_size_factor
+    @property
+    def crosshair_min_length(self) -> int:
+        """
+        Selected allowable crosshair minimum length.
+
+        :return: Crosshair minimum length
+        """
+        return int(self.ui.crosshair_min_length_spin.value())
+
+    @property
+    def crosshair_slope_tilt(self) -> float:
+        """
+        Selected crosshair slope definition rotation.
+
+        :return: Crosshair slope rotation.
+        """
+        return float(self.ui.crosshair_slope_tilt_spin.value())
+
+    @property
+    def crosshair_distance(self) -> int:
+        """
+        Selected separation distance between crosshairs.
+
+        :return: Distance between crosshairs.
+        """
+        return int(self.ui.distance_interval_spin.value())
+
+    @property
+    def elliptical_size_range(self) -> tuple[float, float]:
+        """
+        Selected range of detected elliptical sizes.
+
+        :return: elliptical size range.
+        """
+        return self.ui.elliptical_min_size_slider.value(), self.ui.elliptical_max_size_slider.value()
 
     @property
     def feature_size_range(self) -> tuple[float, float]:
         """
-        Selected range of detected feature (rectangles or crosshairs) sizes.
+        Selected range of detected contour (rectangles or crosshairs) sizes.
 
-        :return: Feature size range.
+        :return: contour size range.
         """
-        min_size = self.ui.feature_min_size_slider.value()
-        max_size = self.ui.feature_max_size_slider.value()
-
-        return min_size * self.range_size_factor, max_size * self.range_size_factor
+        return self.ui.feature_min_size_slider.value(), self.ui.feature_max_size_slider.value()
 
     @property
-    def gauss_blur(self) -> int:
+    def gauss_blur_kernel(self) -> int:
         """
         Selected gaussian blur kernel size.
 
@@ -562,15 +567,6 @@ class FeatureFinder(QWidget):
             val += 1
 
         return val
-
-    @property
-    def hough_threshold(self) -> int:
-        """
-        Selected Hough line threshold value.
-
-        :return: Threshold value.
-        """
-        return int(self.ui.hough_threshold_spin.value())
 
     @property
     def pixel_threshold(self) -> int:
@@ -595,27 +591,13 @@ class FeatureFinder(QWidget):
             return 1000000
 
     @property
-    def range_size_factor(self) -> float:
+    def rectangular_size_range(self) -> tuple[float, float]:
         """
-        Factor applied to size sliders based on detection method.
+        Selected range of detected elliptical sizes.
 
-        :return: Slider size factor.
+        :return: elliptical size range.
         """
-        if not self.rect_detection_status:
-            size_factor = 1 / 100
-        else:
-            size_factor = 1.0
-
-        return size_factor
-
-    @property
-    def rect_detection_status(self) -> bool:
-        """
-        Flag for rect. detection method.
-
-        :return: Crosshair detection (false) or rectangle detection (true).
-        """
-        return self.ui.crosshair_detection_check.isChecked()
+        return self.ui.rect_min_size_slider.value(), self.ui.rect_max_size_slider.value()
 
 
 class Display(QGraphicsView):

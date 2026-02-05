@@ -1,9 +1,7 @@
-circle_fit
 numpy
 opencv-python
-pygetwindow
-pynput
 pydantic
+pynput
 pyside6
-scipy
 pyyaml
+scipy
