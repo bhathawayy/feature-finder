@@ -1,4 +1,3 @@
-circle_fit
 numpy
 opencv-python
 pydantic
