@@ -82,17 +82,17 @@ class FeatureFinder(QWidget):
                 spin_box.lineEdit().returnPressed.connect(self._change_range_slider_or_spin)
 
         spin_box_to_property_map = {
-            self.ui.circularity_spin: self.circularity_min,
-            self.ui.crosshair_min_length_spin: self.crosshair_min_length,
-            self.ui.crosshair_slope_tilt_spin: self.crosshair_slope_tilt,
-            self.ui.distance_interval_spin: self.crosshair_distance,
-            self.ui.gauss_blur_spin: self.gauss_blur_kernel,
-            self.ui.hough_threshold_spin: self.crosshair_hough_threshold,
-            self.ui.pixel_threshold_spin: self.pixel_threshold
+            self.ui.circularity_spin: type(self).circularity_min.fget.__name__,
+            self.ui.crosshair_min_length_spin: type(self).crosshair_min_length.fget.__name__,
+            self.ui.crosshair_slope_tilt_spin: type(self).crosshair_slope_tilt.fget.__name__,
+            self.ui.distance_interval_spin: type(self).crosshair_distance.fget.__name__,
+            self.ui.gauss_blur_spin: type(self).gauss_blur_kernel.fget.__name__,
+            self.ui.hough_threshold_spin: type(self).crosshair_hough_threshold.fget.__name__,
+            self.ui.pixel_threshold_spin: type(self).pixel_threshold.fget.__name__
         }
         for spin_box in spin_box_to_property_map:
             spin_box.lineEdit().returnPressed.connect(
-                lambda: self._change_spin(spin_box, lambda: spin_box_to_property_map[spin_box]))
+                lambda: self._change_spin(spin_box, spin_box_to_property_map[spin_box]))
 
         # Buttons / Check boxes
         self.ui.elliptical_fit_check.clicked.connect(self._click_enable_circle_fitting)
@@ -154,17 +154,17 @@ class FeatureFinder(QWidget):
             spin_box.setValue(new_val)
         self._update_image()
 
-    def _change_spin(self, toggled_widget: QSpinBox, property_call: Callable):
+    def _change_spin(self, toggled_widget: QSpinBox, attribute_name: str):
         """
         Action for changing a spin-box widget.
 
         :param toggled_widget: Toggled spin-box (self.sender() doesn't work with lambda)
-        :param property_call: Handle to property call.
+        :param attribute_name: Name of property call.
         :return: None
         """
         widget_name = toggled_widget.objectName().lower()
         slider = self.ui.__getattribute__(widget_name.replace("_spin", "_slider"))
-        slider.setValue(int(getattr(self, property_call())))
+        slider.setValue(int(getattr(self, attribute_name)))
 
     def _click_browse_file(self):
         """
