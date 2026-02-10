@@ -78,7 +78,7 @@ class FeatureFinder(QWidget):
         # Spin boxes
         for spin_box in self.findChildren(QAbstractSpinBox):
             spin_box_name = spin_box.objectName().lower()
-            if "_max" in spin_box_name or "_min" in spin_box_name:
+            if ("_max" in spin_box_name or "_min" in spin_box_name) and "crosshair" not in spin_box_name:
                 spin_box.lineEdit().returnPressed.connect(self._change_range_slider_or_spin)
 
         spin_box_to_property_map = {
