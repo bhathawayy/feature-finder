@@ -140,4 +140,5 @@ cython_debug/
 .pypirc
 /.idea
 /src/feature_finder/interface/.qtcreator
-/src/feature_finder/resources
+*.yaml
+src/feature_finder/resources/ff_drawing.png
