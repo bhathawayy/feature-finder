@@ -110,7 +110,7 @@ class DetectionBase:
                 # Save detection info
                 self._contours_all.append((contour, approx, area, perimeter))
 
-    def _find_crosshairs(self, crosshair_rotation: float = 0.0):
+    def _find_crosshairs(self, crosshair_rotation: float = 0.0, angular_cutoff: float | None = None):
         """
         Once contours have found, search for the appropriate shapes, then draw these on the debug image.
 
@@ -125,24 +125,36 @@ class DetectionBase:
             dx = x2 - x1
             dy = y2 - y1
             if abs(dx) < 1:  # vertical line
-                angle = 90
+                tilt_angle = 90
             else:
-                angle = np.degrees(np.arctan(dy / dx))
+                tilt_angle = np.degrees(np.arctan(dy / dx))
 
-            # Adjust angle by rotation offset for color classification
-            adjusted_angle = angle - crosshair_rotation
+            # Adjust tilt_angle by rotation offset for color classification
+            adjusted_angle = tilt_angle - crosshair_rotation
             while adjusted_angle > 90:
                 adjusted_angle -= 180
             while adjusted_angle < -90:
                 adjusted_angle += 180
 
-            # Classify as vertical or horizontal based on adjusted angle
+            # Classify as vertical or horizontal based on adjusted tilt_angle
             if abs(adjusted_angle) > 45:  # closer to vertical
                 color = self._color_line_v
             else:  # closer to horizontal
                 color = self._color_line_h
 
-            return (x1, y1), (x2, y2), dx, dy, angle, color
+            return (x1, y1), (x2, y2), dx, dy, tilt_angle, color
+
+        def is_duplicate(new_feature):
+            for existing in self.found_features:
+                if (existing.area == new_feature.area and 
+                    existing.width == new_feature.width and 
+                    existing.height == new_feature.height and 
+                    existing.rotation == new_feature.rotation):
+                    dist = np.sqrt((existing.centroid[0] - new_feature.centroid[0])**2 + 
+                                   (existing.centroid[1] - new_feature.centroid[1])**2)
+                    if dist <= 50:
+                        return True
+            return False
 
         self._crosshair_centers = []
         for i, line1 in enumerate(self._lines):
@@ -162,21 +174,13 @@ class DetectionBase:
                         ix = ep11[0] + t * dx1
                         iy = ep11[1] + t * dy1
 
-                        # Check if intersection is near the middle of both lines
-                        # Calculate position along each line (0 = start, 1 = end)
                         line1_length = np.sqrt(dx1 ** 2 + dy1 ** 2)
                         line2_length = np.sqrt(dx2 ** 2 + dy2 ** 2)
 
-                        pos1 = np.sqrt((ix - ep11[0]) ** 2 + (iy - ep11[1]) ** 2) / line1_length
-                        pos2 = np.sqrt((ix - ep21[0]) ** 2 + (iy - ep21[1]) ** 2) / line2_length
-
-                        # Only accept if intersection is in middle third of both lines (middle 30%)
-                        if 0.3 <= pos1 <= 0.7 and 0.3 <= pos2 <= 0.7:
-                            # Save to found
-                            self._crosshair_centers.append((int(ix), int(iy)))
-                            for line_length, angle in [[line1_length, angle1], [line2_length, angle2]]:
-                                self.found_features.append(
-                                    FeatureInfo(
+                        # Save to found
+                        for line_length, angle in [[line1_length, angle1], [line2_length, angle2]]:
+                            if angular_cutoff is None or abs(angle) < angular_cutoff:
+                                data = FeatureInfo(
                                         shape_type="line",
                                         area=round(line_length, self._sig_fig),
                                         width=round(line_length, self._sig_fig) if angle < 1 else 0,
@@ -184,11 +188,15 @@ class DetectionBase:
                                         centroid=(int(ix), int(iy)),
                                         rotation=round(angle, self._sig_fig)
                                     )
-                                )
+                                if not is_duplicate(data):
+                                    self.found_features.append(data)
+                                    self._crosshair_centers.append((int(ix), int(iy)))
 
-                            # Draw shape
-                            cv2.line(self.display_image, ep11, ep12, color1, self._draw_size)
-                            cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
+                                    # Draw shape
+                                    if angular_cutoff is None or abs(angle1) < angular_cutoff:
+                                        cv2.line(self.display_image, ep11, ep12, color1, self._draw_size)
+                                    if angular_cutoff is None or abs(angle2) < angular_cutoff:
+                                        cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
 
     def _find_rects(self, rectangular_size_range: tuple[float, float]):
         """
