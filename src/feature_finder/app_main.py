@@ -92,7 +92,7 @@ class FeatureFinder(QWidget):
         }
         for spin_box in spin_box_to_property_map:
             spin_box.lineEdit().returnPressed.connect(
-                lambda: self._change_spin(spin_box, spin_box_to_property_map[spin_box]))
+                lambda sb=spin_box, attr=spin_box_to_property_map[spin_box]: self._change_spin(sb, attr))
 
         # Buttons / Check boxes
         self.ui.elliptical_fit_check.clicked.connect(self._click_enable_circle_fitting)
@@ -431,9 +431,10 @@ class FeatureFinder(QWidget):
                     self.crosshair_hough_threshold,
                     self.crosshair_distance,
                     self.crosshair_min_length,
-                    update=(update_next or self.crosshair_hough_threshold !=
-                            self.detection_settings.crosshair_hough_threshold or
-                            self.crosshair_min_length != self.detection_settings.crosshair_min_length))
+                    update=(update_next or
+                            self.crosshair_hough_threshold != self.detection_settings.crosshair_hough_threshold or
+                            self.crosshair_min_length != self.detection_settings.crosshair_min_length or
+                            self.crosshair_distance != self.detection_settings.crosshair_distance))
 
             # Find and draw contours/detections
             self.detector.detect_features(
