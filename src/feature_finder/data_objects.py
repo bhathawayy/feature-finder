@@ -88,13 +88,13 @@ class DefaultSettings(YamlConfig):
     # Feature detection settings
     feature_size_range: tuple = Field(default=(0, 700000))  # Expected size of any feature [(pxl^2, pxl^2)]
     gauss_blur_kernel: int = Field(default=21)  # Gaussian blur kernel size
-    pixel_threshold: int = Field(default=19)  # Explicit edge thresholding
+    pixel_threshold: int = Field(default=150)  # Explicit edge thresholding
 
     # Feature fitting settings
     circularity_min: float = Field(default=0.6)  # The closer to 1, the more "perfect" the circle is
-    crosshair_distance: int = Field(default=10)
-    crosshair_hough_threshold: int = Field(default=40)  # Explicit Hough line thresholding
-    crosshair_min_length: int = Field(default=10)  # Allowable length of Hough lines
+    crosshair_distance: int = Field(default=150)
+    crosshair_hough_threshold: int = Field(default=15)  # Explicit Hough line thresholding
+    crosshair_min_length: int = Field(default=150)  # Allowable length of Hough lines
     crosshair_slope_tilt: float = Field(default=0.0)  # Rotation of slope definition about origin.
     elliptical_size_range: tuple = Field(default=(0, 220000))  # Expected size of elliptical object [(pxl^2, pxl^2)]
     rectangular_size_range: tuple = Field(default=(0, 220000))  # Expected size of rectangular object [(pxl^2, pxl^2)]

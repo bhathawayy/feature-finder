@@ -356,8 +356,8 @@ class DetectionBase:
 
         return update_next
 
-    def detect_features(self, feature_size_range: tuple[float, float], ellipse_size_range: tuple[float, float],
-                        rectangular_size_range: tuple[float, float], circularity_min: float = 0.5,
+    def detect_features(self, feature_size_range: tuple[float, float], ellipse_size_range: tuple[float, float] = (0, 0),
+                        rectangular_size_range: tuple[float, float] = (0, 0), circularity_min: float = 0.5,
                         crosshair_rotation: float = 0.0, fit_ellipse: bool = True, fit_rect: bool = True,
                         fit_crosshair: bool = True) -> list[FeatureInfo]:
         """
