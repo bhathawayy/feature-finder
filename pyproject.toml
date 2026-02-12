@@ -3,8 +3,8 @@ name = "feature_finder"
 authors = [
     { name = "Brooke Hathaway" }
 ]
-version = "1.1.0"
-requires-python = ">=3.12"
+version = "2.1.0"
+requires-python = ">=3.6"
 
 dynamic = ["dependencies"]
 readme = "README.md"
