@@ -3,7 +3,7 @@ import math
 import os
 import sys
 import yaml
-from typing import Any, Callable
+from typing import Any
 
 import cv2
 import numpy as np
@@ -84,7 +84,7 @@ class FeatureFinder(QWidget):
         spin_box_to_property_map = {
             self.ui.circularity_spin: type(self).circularity_min.fget.__name__,
             self.ui.crosshair_min_length_spin: type(self).crosshair_min_length.fget.__name__,
-            self.ui.crosshair_slope_tilt_spin: type(self).crosshair_slope_tilt.fget.__name__,
+            self.ui.crosshair_max_slope_spin: type(self).crosshair_max_slope.fget.__name__,
             self.ui.distance_interval_spin: type(self).crosshair_distance.fget.__name__,
             self.ui.gauss_blur_spin: type(self).gauss_blur_kernel.fget.__name__,
             self.ui.hough_threshold_spin: type(self).crosshair_hough_threshold.fget.__name__,
@@ -392,7 +392,7 @@ class FeatureFinder(QWidget):
         set_widget_value(self.ui.circularity_spin, settings.circularity_min, 100)
         set_widget_value(self.ui.hough_threshold_spin, settings.crosshair_hough_threshold)
         set_widget_value(self.ui.crosshair_min_length_spin, settings.crosshair_min_length)
-        set_widget_value(self.ui.crosshair_slope_tilt_spin, settings.crosshair_slope_tilt)
+        set_widget_value(self.ui.crosshair_max_slope_spin, settings.crosshair_slope_tilt)
         set_widget_value(self.ui.rect_max_size_slider, settings.feature_size_range)
 
     def _startup(self):
@@ -439,10 +439,10 @@ class FeatureFinder(QWidget):
             # Find and draw contours/detections
             self.detector.detect_features(
                 self.feature_size_range,
-                self.elliptical_size_range,
-                self.rectangular_size_range,
-                self.circularity_min,
-                self.crosshair_slope_tilt,
+                ellipse_size_range=self.elliptical_size_range,
+                rectangular_size_range=self.rectangular_size_range,
+                circularity_min=self.circularity_min,
+                angular_cutoff=self.crosshair_max_slope,
                 fit_ellipse=self.ui.elliptical_fit_check.isChecked(),
                 fit_rect=self.ui.rect_fit_check.isChecked(),
                 fit_crosshair=self.ui.crosshair_fit_check.isChecked()
@@ -516,13 +516,13 @@ class FeatureFinder(QWidget):
         return int(self.ui.crosshair_min_length_spin.value())
 
     @property
-    def crosshair_slope_tilt(self) -> float:
+    def crosshair_max_slope(self) -> float:
         """
         Selected crosshair slope definition rotation.
 
         :return: Crosshair slope rotation.
         """
-        return float(self.ui.crosshair_slope_tilt_spin.value())
+        return float(self.ui.crosshair_max_slope_spin.value())
 
     @property
     def crosshair_distance(self) -> int:

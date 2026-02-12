@@ -110,7 +110,7 @@ class DetectionBase:
                 # Save detection info
                 self._contours_all.append((contour, approx, area, perimeter))
 
-    def _find_crosshairs(self, crosshair_rotation: float = 0.0, angular_cutoff: float | None = None):
+    def _find_crosshairs(self, angular_cutoff: float = 0.0):
         """
         Once contours have found, search for the appropriate shapes, then draw these on the debug image.
 
@@ -129,15 +129,8 @@ class DetectionBase:
             else:
                 tilt_angle = np.degrees(np.arctan(dy / dx))
 
-            # Adjust tilt_angle by rotation offset for color classification
-            adjusted_angle = tilt_angle - crosshair_rotation
-            while adjusted_angle > 90:
-                adjusted_angle -= 180
-            while adjusted_angle < -90:
-                adjusted_angle += 180
-
             # Classify as vertical or horizontal based on adjusted tilt_angle
-            if abs(adjusted_angle) > 45:  # closer to vertical
+            if abs(tilt_angle) > 45:  # closer to vertical
                 color = self._color_line_v
             else:  # closer to horizontal
                 color = self._color_line_h
@@ -179,7 +172,7 @@ class DetectionBase:
 
                         # Save to found
                         for line_length, angle in [[line1_length, angle1], [line2_length, angle2]]:
-                            if angular_cutoff is None or abs(angle) < angular_cutoff:
+                            if angular_cutoff == 0 or abs(angle) < angular_cutoff:
                                 data = FeatureInfo(
                                         shape_type="line",
                                         area=round(line_length, self._sig_fig),
@@ -192,10 +185,10 @@ class DetectionBase:
                                     self.found_features.append(data)
                                     self._crosshair_centers.append((int(ix), int(iy)))
 
-                                    # Draw shape
-                                    if angular_cutoff is None or abs(angle1) < angular_cutoff:
-                                        cv2.line(self.display_image, ep11, ep12, color1, self._draw_size)
-                                    if angular_cutoff is None or abs(angle2) < angular_cutoff:
+                        # Draw shape
+                        if angular_cutoff == 0 or abs(angle1) < angular_cutoff:
+                            cv2.line(self.display_image, ep11, ep12, color1, self._draw_size)
+                        if angular_cutoff == 0 or abs(angle2) < angular_cutoff:
                                         cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
 
     def _find_rects(self, rectangular_size_range: tuple[float, float]):
@@ -358,14 +351,14 @@ class DetectionBase:
 
     def detect_features(self, feature_size_range: tuple[float, float], ellipse_size_range: tuple[float, float] = (0, 0),
                         rectangular_size_range: tuple[float, float] = (0, 0), circularity_min: float = 0.5,
-                        crosshair_rotation: float = 0.0, fit_ellipse: bool = True, fit_rect: bool = True,
+                        angular_cutoff: float = 0.0, fit_ellipse: bool = True, fit_rect: bool = True,
                         fit_crosshair: bool = True) -> list[FeatureInfo]:
         """
         Detect features i.e. ellipses, rectangular objects, and/or crosshairs.
 
         :param ellipse_size_range: Allowable blob size range.
         :param circularity_min: Allowable minimum blob circularity.
-        :param crosshair_rotation: Rotation of slope definition about origin.
+        :param angular_cutoff: Maximum allowed slope definition.
         :param feature_size_range: Allowable feature size range.
         :param fit_ellipse: Flag to fit a circle to a blob or not.
         :param fit_crosshair: Flag to fit a crosshair to a blob or not.
@@ -387,7 +380,7 @@ class DetectionBase:
 
         # Detect crosshairs
         if fit_crosshair:
-            self._find_crosshairs(crosshair_rotation)
+            self._find_crosshairs(angular_cutoff)
         else:
             self._crosshair_centers = []
 

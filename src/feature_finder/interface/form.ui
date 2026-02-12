@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1004</width>
-    <height>616</height>
+    <width>1034</width>
+    <height>719</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -349,7 +349,7 @@
            </widget>
           </item>
           <item row="1" column="3">
-           <widget class="QDoubleSpinBox" name="crosshair_slope_tilt_spin">
+           <widget class="QDoubleSpinBox" name="crosshair_max_slope_spin">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -366,7 +366,7 @@
              <string/>
             </property>
             <property name="minimum">
-             <double>-180.000000000000000</double>
+             <double>0.000000000000000</double>
             </property>
             <property name="maximum">
              <double>180.000000000000000</double>
@@ -374,7 +374,7 @@
            </widget>
           </item>
           <item row="1" column="2">
-           <widget class="QSlider" name="crosshair_slope_tilt_slider">
+           <widget class="QSlider" name="crosshair_max_slope_slider">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
               <horstretch>0</horstretch>
@@ -391,7 +391,7 @@
              <string/>
             </property>
             <property name="minimum">
-             <number>-180</number>
+             <number>0</number>
             </property>
             <property name="maximum">
              <number>180</number>
@@ -458,7 +458,7 @@
            </widget>
           </item>
           <item row="1" column="0" colspan="2">
-           <widget class="QLabel" name="crosshair_slope_tilt_label">
+           <widget class="QLabel" name="crosshair_max_slope_label">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
               <horstretch>0</horstretch>
@@ -475,7 +475,7 @@
              <cursorShape>WhatsThisCursor</cursorShape>
             </property>
             <property name="toolTip">
-             <string>Rotates definition of horizontal and vertical slope sorting.</string>
+             <string>Maximum allowed (absolute) slope.</string>
             </property>
             <property name="text">
              <string>Slope Tilt:</string>
