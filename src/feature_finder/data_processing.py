@@ -23,6 +23,7 @@ class DetectionBase:
         self._color_line_v: tuple[int, int, int] = (255, 255, 0)  # Color for vertical lines [BGR]
         self._color_line_h: tuple[int, int, int] = (255, 0, 255)  # Color for horizontal lines [BGR]
         self._draw_size: int = 4  # Edge thickness of drawn features
+        self._sig_fig: int = 4  # Significant digits used when rounding
 
         self._contours_all: list[tuple] = []
         self._contours_non_blobs: list[tuple] = []
@@ -69,11 +70,11 @@ class DetectionBase:
                     # Save to found
                     self.found_features.append(
                         FeatureInfo(
-                            area=shape_area,
-                            centroid=(cx, cy),
-                            height=h,
+                            area=round(shape_area, self._sig_fig),
+                            centroid=(int(cx), int(cy)),
+                            height=round(h, self._sig_fig),
                             shape_type="circle" if min(w, h) / max(w, h) > 0.95 else "ellipse",
-                            width=w
+                            width=round(w, self._sig_fig)
                         )
                     )
 
@@ -177,11 +178,11 @@ class DetectionBase:
                                 self.found_features.append(
                                     FeatureInfo(
                                         shape_type="line",
-                                        area=line_length,
-                                        width=line_length if angle < 1 else 0,
-                                        height=0 if angle < 1 else line_length,
+                                        area=round(line_length, self._sig_fig),
+                                        width=round(line_length, self._sig_fig) if angle < 1 else 0,
+                                        height=0 if angle < 1 else round(line_length, self._sig_fig),
                                         centroid=(int(ix), int(iy)),
-                                        rotation=angle
+                                        rotation=round(angle, self._sig_fig)
                                     )
                                 )
 
@@ -214,12 +215,12 @@ class DetectionBase:
                 (cx, cy), (w, h), angle = cv2.minAreaRect(contour)
                 self.found_features.append(
                     FeatureInfo(
-                        area=shape_area,
-                        centroid=(cx, cy),
-                        height=h,
-                        rotation=angle,
+                        area=round(shape_area, self._sig_fig),
+                        centroid=(int(cx), int(cy)),
+                        height=round(h, self._sig_fig),
+                        rotation=round(angle, self._sig_fig),
                         shape_type="rectangular",
-                        width=w
+                        width=round(w, self._sig_fig)
                     )
                 )
 
