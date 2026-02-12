@@ -3,6 +3,7 @@ import warnings
 
 import cv2
 import numpy as np
+import math
 from scipy.signal import argrelmin
 
 from feature_finder.data_objects import FeatureInfo
@@ -19,21 +20,20 @@ class DetectionBase:
         # Set class variables
         self._color_blob: tuple[int, int, int] = (0, 255, 0)  # Color for blobs [BGR]
         self._color_edge: tuple[int, int, int] = (0, 0, 255)  # Color for edges [BGR]
-        self._color_rect: tuple[int, int, int] = (255, 0, 0)  # Color for rects [BGR]
-        self._color_line_v: tuple[int, int, int] = (255, 255, 0)  # Color for vertical lines [BGR]
         self._color_line_h: tuple[int, int, int] = (255, 0, 255)  # Color for horizontal lines [BGR]
+        self._color_line_v: tuple[int, int, int] = (255, 255, 0)  # Color for vertical lines [BGR]
+        self._color_rect: tuple[int, int, int] = (255, 0, 0)  # Color for rects [BGR]
         self._draw_size: int = 4  # Edge thickness of drawn features
+        self._min_deviation: int = 10  # Min. deviation for filtering duplicates
         self._sig_fig: int = 4  # Significant digits used when rounding
 
         self._contours_all: list[tuple] = []
         self._contours_non_blobs: list[tuple] = []
-        self._crosshair_centers: list[tuple[int, int]] = []
         self._image_gauss: np.ndarray = np.array([])
         self._image_normal: np.ndarray = np.array([])
         self._image_thresh: np.ndarray = np.array([])
-        self._lines: list = []
+        self._lines: np.ndarray = np.array([])
         self._raw_array: np.ndarray = image_array
-
         self.display_image: np.ndarray = np.array([])
         self.found_features: list[FeatureInfo] = []
 
@@ -43,12 +43,13 @@ class DetectionBase:
         else:
             raise FileNotFoundError("Improper image input!")
 
-    def _find_ellipses(self, ellipse_size_range: tuple[float, float], circularity_min: float = 0.5):
+    def _find_ellipses(self, ellipse_size_range: tuple[float, float], circularity_min: float = 0.5, include: bool = True):
         """
         Once contours have found, search for blobs, then draw these on the debug image.
 
         :param ellipse_size_range: Range of acceptable blob areas.
         :param circularity_min: Minimum acceptable blob circularity. The closer to 1, the more "circular".
+        :param include: Flag to include feature in findings or just use the non-blob contours.
         :return: None.
         """
         self._contours_non_blobs = []
@@ -61,7 +62,7 @@ class DetectionBase:
                 # Filter based on circle size
                 circle = np.array([pnt[0] for pnt in approx])
                 shape_area = cv2.contourArea(circle)
-                if ellipse_size_range[0] <= shape_area <= ellipse_size_range[1]:
+                if ellipse_size_range[0] <= shape_area <= ellipse_size_range[1] and include:
 
                     # Fit & draw ellipse
                     (cx, cy), (w, h), angle = cv2.fitEllipse(contour)
@@ -114,7 +115,7 @@ class DetectionBase:
         """
         Once contours have found, search for the appropriate shapes, then draw these on the debug image.
 
-        :param crosshair_rotation: Rotation of slope definition about origin.
+        :param angular_cutoff: Rotation of slope definition about origin.
         :return: None
         """
 
@@ -158,38 +159,42 @@ class DetectionBase:
 
                 # Check if lines are perpendicular to each other
                 angle_diff = abs(abs(angle1 - angle2) - 90)
-                if angle_diff <= 10:
+                if angle_diff <= self._min_deviation:
 
                     # Find intersection point
-                    denom = dx1 * dy2 - dy1 * dx2
-                    if abs(denom) > 1e-10:  # Lines are not parallel
-                        t = ((ep21[0] - ep11[0]) * dy2 - (ep21[1] - ep11[1]) * dx2) / denom
+                    denominator = dx1 * dy2 - dy1 * dx2
+                    if abs(denominator) > 1e-10:  # Lines are not parallel
+                        t = ((ep21[0] - ep11[0]) * dy2 - (ep21[1] - ep11[1]) * dx2) / denominator
                         ix = ep11[0] + t * dx1
                         iy = ep11[1] + t * dy1
 
                         line1_length = np.sqrt(dx1 ** 2 + dy1 ** 2)
                         line2_length = np.sqrt(dx2 ** 2 + dy2 ** 2)
+                        pos1 = np.sqrt((ix - ep11[0]) ** 2 + (iy - ep11[1]) ** 2) / line1_length
+                        pos2 = np.sqrt((ix - ep21[0]) ** 2 + (iy - ep21[1]) ** 2) / line2_length
 
-                        # Save to found
-                        for line_length, angle in [[line1_length, angle1], [line2_length, angle2]]:
-                            if angular_cutoff == 0 or abs(angle) < angular_cutoff:
-                                data = FeatureInfo(
-                                        shape_type="line",
-                                        area=round(line_length, self._sig_fig),
-                                        width=round(line_length, self._sig_fig) if angle < 1 else 0,
-                                        height=0 if angle < 1 else round(line_length, self._sig_fig),
-                                        centroid=(int(ix), int(iy)),
-                                        rotation=round(angle, self._sig_fig)
-                                    )
-                                if not is_duplicate(data):
-                                    self.found_features.append(data)
-                                    self._crosshair_centers.append((int(ix), int(iy)))
+                        # Only accept if intersection is in middle third of both lines (middle 30%)
+                        if 0.3 <= pos1 <= 0.7 and 0.3 <= pos2 <= 0.7:
 
-                        # Draw shape
-                        if angular_cutoff == 0 or abs(angle1) < angular_cutoff:
-                            cv2.line(self.display_image, ep11, ep12, color1, self._draw_size)
-                        if angular_cutoff == 0 or abs(angle2) < angular_cutoff:
-                                        cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
+                            # Save to found
+                            for line_length, angle in [[line1_length, angle1], [line2_length, angle2]]:
+                                if angular_cutoff == 0 or abs(angle) < angular_cutoff:
+                                    data = FeatureInfo(
+                                            shape_type="line",
+                                            area=round(line_length, self._sig_fig),
+                                            width=round(line_length, self._sig_fig) if angle < 1 else 0,
+                                            height=0 if angle < 1 else round(line_length, self._sig_fig),
+                                            centroid=(int(ix), int(iy)),
+                                            rotation=round(angle, self._sig_fig)
+                                        )
+                                    if not is_duplicate(data):
+                                        self.found_features.append(data)
+
+                            # Draw shape
+                            if angular_cutoff == 0 or abs(angle1) < angular_cutoff:
+                                cv2.line(self.display_image, ep11, ep12, color1, self._draw_size)
+                            if angular_cutoff == 0 or abs(angle2) < angular_cutoff:
+                                            cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
 
     def _find_rects(self, rectangular_size_range: tuple[float, float]):
         """
@@ -198,6 +203,9 @@ class DetectionBase:
         :param rectangular_size_range: Range of acceptable feature areas.
         :return: None
         """
+        def distance(p1: tuple[float | int, float | int], p2: tuple[float | int, float | int]) -> float:
+            return round(math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2), self._sig_fig)
+
         for contour, approx, contour_area, contour_perimeter in self._contours_non_blobs:
 
             # Filter based on rectangle size
@@ -206,14 +214,15 @@ class DetectionBase:
             if rectangular_size_range[0] <= shape_area <= rectangular_size_range[1]:
 
                 # Skip rectangular fitting for crosshairs
-                if any(cv2.pointPolygonTest(contour, center, False) >= 0 for center in self._crosshair_centers):
+                (cx, cy), (w, h), angle = cv2.minAreaRect(contour)
+                if any(distance((cx, cy), p.centroid) < self._min_deviation for p in
+                       self.found_features if p.shape_type == "line"):
                     continue
 
                 # Draw shape
                 cv2.drawContours(self.display_image, [box], 0, self._color_rect, self._draw_size)
 
                 # Save to found
-                (cx, cy), (w, h), angle = cv2.minAreaRect(contour)
                 self.found_features.append(
                     FeatureInfo(
                         area=round(shape_area, self._sig_fig),
@@ -366,8 +375,9 @@ class DetectionBase:
         :param rectangular_size_range: Range of acceptable rect areas.
         :return: List of found features.
         """
-        # Reset drawn image
+        # Reset variables
         self.display_image = self._image_rgb8.copy()
+        self.found_features = []
 
         # Detect edges/contours
         self._find_contours(feature_size_range)
@@ -376,13 +386,11 @@ class DetectionBase:
         if fit_ellipse:
             self._find_ellipses(ellipse_size_range, circularity_min=circularity_min)
         else:
-            self._contours_non_blobs = self._contours_non_blobs
+            self._find_ellipses(ellipse_size_range, circularity_min=circularity_min, include=False)
 
         # Detect crosshairs
         if fit_crosshair:
             self._find_crosshairs(angular_cutoff)
-        else:
-            self._crosshair_centers = []
 
         # Detect rects
         if fit_rect:

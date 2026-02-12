@@ -210,6 +210,7 @@ class FeatureFinder(QWidget):
             image_array = import_image(selected_file)
 
             if image_array.size > 0:
+
                 # Store the image array
                 self._raw_image = image_array
                 self.drawn_image = convert_color_bit(image_array, color_channels=3, out_bit_depth=8)
@@ -220,7 +221,7 @@ class FeatureFinder(QWidget):
                 self.ui.fitting_frame.setEnabled(True)
                 self.ui.save_image_button.setEnabled(True)
 
-                # TODO: Init the appropriate detector
+                # Import detector object
                 self.detector = DetectionBase(self._raw_image)
 
                 # Update the stream window to show imported image
@@ -392,7 +393,7 @@ class FeatureFinder(QWidget):
         set_widget_value(self.ui.circularity_spin, settings.circularity_min, 100)
         set_widget_value(self.ui.hough_threshold_spin, settings.crosshair_hough_threshold)
         set_widget_value(self.ui.crosshair_min_length_spin, settings.crosshair_min_length)
-        set_widget_value(self.ui.crosshair_max_slope_spin, settings.crosshair_slope_tilt)
+        set_widget_value(self.ui.crosshair_max_slope_spin, settings.crosshair_max_slope)
         set_widget_value(self.ui.rect_max_size_slider, settings.feature_size_range)
 
     def _startup(self):
@@ -456,7 +457,7 @@ class FeatureFinder(QWidget):
                 f"\tcircularity = {self.detection_settings.circularity_min}"
                 f"\tcrosshair distance = {self.detection_settings.crosshair_distance}"
                 f"\tcrosshair min. length = {self.detection_settings.crosshair_min_length}"
-                f"\tcrosshair slope tilt = {self.detection_settings.crosshair_slope_tilt}"
+                f"\tcrosshair max slope = {self.detection_settings.crosshair_max_slope}"
                 f"\telliptical size range = {self.detection_settings.elliptical_size_range}"
                 f"\tfeature size range = {self.detection_settings.feature_size_range}"
                 f"\tgauss blur kernel = {self.detection_settings.gauss_blur_kernel}"

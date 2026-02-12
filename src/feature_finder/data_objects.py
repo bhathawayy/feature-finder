@@ -86,23 +86,23 @@ class DefaultSettings(YamlConfig):
     Needs to be the same as property names in FeatureFinder app!
     """
     # Feature detection settings
-    feature_size_range: tuple = Field(default=(0, 700000))  # Expected size of any feature [(pxl^2, pxl^2)]
+    feature_size_range: tuple[int, int] = Field(default=(0, 700000))  # Expected size of any feature [(pxl^2, pxl^2)]
     gauss_blur_kernel: int = Field(default=21)  # Gaussian blur kernel size
     pixel_threshold: int = Field(default=150)  # Explicit edge thresholding
 
     # Feature fitting settings
     circularity_min: float = Field(default=0.6)  # The closer to 1, the more "perfect" the circle is
-    crosshair_distance: int = Field(default=150)
+    crosshair_distance: int = Field(default=5)  # Allowable distance between detections
     crosshair_hough_threshold: int = Field(default=15)  # Explicit Hough line thresholding
-    crosshair_min_length: int = Field(default=150)  # Allowable length of Hough lines
-    crosshair_slope_tilt: float = Field(default=0.0)  # Rotation of slope definition about origin.
-    elliptical_size_range: tuple = Field(default=(0, 220000))  # Expected size of elliptical object [(pxl^2, pxl^2)]
-    rectangular_size_range: tuple = Field(default=(0, 220000))  # Expected size of rectangular object [(pxl^2, pxl^2)]
+    crosshair_min_length: int = Field(default=10)  # Allowable length of Hough lines
+    crosshair_max_slope: float = Field(default=0.0)  # Max allowed slope of crosshair
+    elliptical_size_range: tuple[int, int] = Field(default=(0, 220000))  # Expected size of elliptical object [(pxl^2, pxl^2)]
+    rectangular_size_range: tuple[int, int] = Field(default=(0, 220000))  # Expected size of rectangular object [(pxl^2, pxl^2)]
 
 
 class FeatureInfo(YamlConfig):
     area: float = Field(default=np.nan)
-    centroid: tuple = Field(default=(np.nan, np.nan))
+    centroid: tuple[int, int] = Field(default=(np.nan, np.nan))
     height: float = Field(default=np.nan)
     rotation: float = Field(default=np.nan)
     shape_type: str = Field(default="NA")
