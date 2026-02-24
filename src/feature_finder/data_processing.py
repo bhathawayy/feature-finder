@@ -69,8 +69,8 @@ class DetectionBase:
         for contour, approx, contour_area, contour_perimeter in self._contours_all:
 
             # Sort according to circularity
-            circularity = 4 * np.pi * (contour_area / (contour_perimeter * contour_perimeter))
-            if circularity >= circularity_min and len(approx) > 8:  # use approx to prevent circle fitting of rects
+            circularity = contour_area / cv2.contourArea(cv2.convexHull(contour))
+            if circularity >= self.settings.features.ellipse.circularity_min and len(approx) > 4:  # prevent circle fitting of rects
 
                 # Filter based on circle size
                 circle = np.array([pnt[0] for pnt in approx])
@@ -87,6 +87,7 @@ class DetectionBase:
                             area=round(shape_area, self._sig_fig),
                             centroid=(int(cx), int(cy)),
                             height=round(h, self._sig_fig),
+                            rotation=round(angle, self._sig_fig),
                             shape_type="circle" if abs(min(w, h) / max(w, h)) > 0.95 else "ellipse",
                             width=round(w, self._sig_fig)
                         )
@@ -224,7 +225,7 @@ class DetectionBase:
             # Filter based on rectangle size
             box = cv2.boxPoints(cv2.minAreaRect(contour)).astype(int)
             shape_area = cv2.contourArea(box)
-            if rectangular_size_range[0] <= shape_area <= rectangular_size_range[1]:
+            if size_range[0] <= shape_area <= size_range[1] and len(approx) == 4:  # prevent rect fitting of crosshairs
 
                 # Skip rectangular fitting for crosshairs
                 (cx, cy), (w, h), angle = cv2.minAreaRect(contour)
