@@ -4,14 +4,15 @@ import warnings
 import cv2
 import numpy as np
 import math
-from scipy.signal import argrelmin
 
-from feature_finder.data_objects import FeatureInfo
+from typing_extensions import Any
+
+from feature_finder.data_objects import FeatureInfo, DetectionSettings
 
 
 class DetectionBase:
 
-    def __init__(self, image_array: np.ndarray):
+    def __init__(self, image_array: np.ndarray, detection_settings: DetectionSettings | str | None = None):
         """
         GUI to help the user determine proper detection values for what gets entered in detection_setting.py.
 
@@ -37,22 +38,34 @@ class DetectionBase:
         self.display_image: np.ndarray = np.array([])
         self.found_features: list[FeatureInfo] = []
 
+        # Import settings
+        if isinstance(detection_settings, str) and os.path.isfile(detection_settings):
+            self.settings = DetectionSettings().from_file(detection_settings)
+        elif isinstance(detection_settings, DetectionSettings):
+            self.settings = detection_settings
+        elif detection_settings is None:
+            from feature_finder import resources
+            self.settings = DetectionSettings().from_file(os.path.join(next(iter(resources.__path__)),
+                                                                       "detection_settings.json"))
+        else:
+            raise ValueError("No valid detection settings were passed!")
+
+        # Initialize arrays
         if self._raw_array.size > 0:
             self._image_mono8: np.ndarray = convert_color_bit(self._raw_array, color_channels=1, out_bit_depth=8)
             self._image_rgb8: np.ndarray = convert_color_bit(self._raw_array, color_channels=3, out_bit_depth=8)
         else:
             raise FileNotFoundError("Improper image input!")
 
-    def _find_ellipses(self, ellipse_size_range: tuple[float, float], circularity_min: float = 0.5, include: bool = True):
+    def _find_ellipses(self, include: bool = True):
         """
         Once contours have found, search for blobs, then draw these on the debug image.
 
-        :param ellipse_size_range: Range of acceptable blob areas.
-        :param circularity_min: Minimum acceptable blob circularity. The closer to 1, the more "circular".
         :param include: Flag to include feature in findings or just use the non-blob contours.
         :return: None.
         """
         self._contours_non_blobs = []
+        size_range = self.settings.features.ellipse.size_range
         for contour, approx, contour_area, contour_perimeter in self._contours_all:
 
             # Sort according to circularity
@@ -62,7 +75,7 @@ class DetectionBase:
                 # Filter based on circle size
                 circle = np.array([pnt[0] for pnt in approx])
                 shape_area = cv2.contourArea(circle)
-                if ellipse_size_range[0] <= shape_area <= ellipse_size_range[1] and include:
+                if size_range[0] <= shape_area <= size_range[1] and include:
 
                     # Fit & draw ellipse
                     (cx, cy), (w, h), angle = cv2.fitEllipse(contour)
@@ -74,7 +87,7 @@ class DetectionBase:
                             area=round(shape_area, self._sig_fig),
                             centroid=(int(cx), int(cy)),
                             height=round(h, self._sig_fig),
-                            shape_type="circle" if min(w, h) / max(w, h) > 0.95 else "ellipse",
+                            shape_type="circle" if abs(min(w, h) / max(w, h)) > 0.95 else "ellipse",
                             width=round(w, self._sig_fig)
                         )
                     )
@@ -82,11 +95,10 @@ class DetectionBase:
             else:
                 self._contours_non_blobs.append((contour, approx, contour_area, contour_perimeter))
 
-    def _find_contours(self, feature_size_range: tuple[float, float]):
+    def _find_contours(self):
         """
         Find contours/edges in the image.
 
-        :param feature_size_range: Range of acceptable contour areas.
         :return: None.
         """
         # Find edges/contours
@@ -94,6 +106,7 @@ class DetectionBase:
 
         # Filter edges/contours
         self._contours_all = []
+        size_range = self.settings.edges.size_range
         for contour in contours_found:
 
             # Filter based on largest range of acceptable sizes
@@ -101,7 +114,7 @@ class DetectionBase:
             if perimeter == 0:
                 continue
             area = cv2.contourArea(contour)
-            if feature_size_range[0] < area <= feature_size_range[1]:
+            if size_range[0] < area <= size_range[1]:
 
                 # Show edge detection
                 approx = cv2.approxPolyDP(contour, 1, True)
@@ -111,11 +124,10 @@ class DetectionBase:
                 # Save detection info
                 self._contours_all.append((contour, approx, area, perimeter))
 
-    def _find_crosshairs(self, angular_cutoff: float = 0.0):
+    def _find_crosshairs(self):
         """
         Once contours have found, search for the appropriate shapes, then draw these on the debug image.
 
-        :param angular_cutoff: Rotation of slope definition about origin.
         :return: None
         """
 
@@ -150,6 +162,7 @@ class DetectionBase:
                         return True
             return False
 
+        angular_cutoff = self.settings.features.crosshair.max_slope
         self._crosshair_centers = []
         for i, line1 in enumerate(self._lines):
             ep11, ep12, dx1, dy1, angle1, color1 = sort_into_slope_category(line1)  # ep = end-point
@@ -180,12 +193,12 @@ class DetectionBase:
                             for line_length, angle in [[line1_length, angle1], [line2_length, angle2]]:
                                 if angular_cutoff == 0 or abs(angle) < angular_cutoff:
                                     data = FeatureInfo(
-                                            shape_type="line",
                                             area=round(line_length, self._sig_fig),
-                                            width=round(line_length, self._sig_fig) if angle < 1 else 0,
-                                            height=0 if angle < 1 else round(line_length, self._sig_fig),
                                             centroid=(int(ix), int(iy)),
-                                            rotation=round(angle, self._sig_fig)
+                                            height=0 if angle < 1 else round(line_length, self._sig_fig),
+                                            rotation=round(angle, self._sig_fig),
+                                            shape_type=f"{'horizontal' if angle < 1 else 'vertical'} line",
+                                            width=round(line_length, self._sig_fig) if angle < 1 else 0
                                         )
                                     if not is_duplicate(data):
                                         self.found_features.append(data)
@@ -196,16 +209,16 @@ class DetectionBase:
                             if angular_cutoff == 0 or abs(angle2) < angular_cutoff:
                                             cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
 
-    def _find_rects(self, rectangular_size_range: tuple[float, float]):
+    def _find_rects(self):
         """
         Once contours have found, search for the appropriate shapes, then draw these on the debug image.
 
-        :param rectangular_size_range: Range of acceptable feature areas.
         :return: None
         """
         def distance(p1: tuple[float | int, float | int], p2: tuple[float | int, float | int]) -> float:
             return round(math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2), self._sig_fig)
 
+        size_range = self.settings.features.rectangle.size_range
         for contour, approx, contour_area, contour_perimeter in self._contours_non_blobs:
 
             # Filter based on rectangle size
@@ -297,17 +310,16 @@ class DetectionBase:
 
         return brightened_image
 
-    def apply_gauss_blur(self, gauss: int, update: bool = False) -> bool:
+    def apply_gauss_blur(self, update: bool = False) -> bool:
         """
         Applies Gaussian blur filter.
 
-        :param gauss: Gaussian kernel value.
         :param update: Update the shown image.
         :return: Whether the shown image needs further updates.
         """
         if update or len(self._image_gauss) == 0:
             # Check input
-            gauss = self._make_odd(gauss)
+            gauss = self._make_odd(self.settings.edges.gauss_blur_kernel)
 
             # Process image
             self._image_gauss = cv2.GaussianBlur(self._image_mono8, (gauss, gauss), sigmaX=1)
@@ -317,23 +329,18 @@ class DetectionBase:
 
         return update_next
 
-    def apply_hough_transform(self, threshold: int, min_distance: int, min_line_length: int,
-                              update: bool = False) -> bool:
+    def apply_hough_transform(self, update: bool = False) -> bool:
         """
         Applies Hough Transform filter.
 
-        :param min_distance: Minimum allowable distance between detected lines.
-        :param min_line_length: Allowable length of lines.
-        :param threshold: Hough thresholding value.
         :param update: Update the shown image.
         :return: Whether the shown image needs further updates.
         """
         if update or len(self._lines) == 0:
-            edged = cv2.Canny(self._image_thresh, 50, 150, apertureSize=3)
-            lines: np.ndarray | None = cv2.HoughLinesP(edged, 1, np.pi / 180,
-                                                       maxLineGap=min_distance,
-                                                       threshold=threshold,
-                                                       minLineLength=min_line_length)
+            lines: np.ndarray | None = cv2.HoughLinesP(self._image_thresh, 1, np.pi / 180,
+                                                       maxLineGap=self.settings.features.crosshair.max_line_gap,
+                                                       threshold=self.settings.features.crosshair.hough_threshold,
+                                                       minLineLength=self.settings.features.crosshair.min_length)
             if lines is not None:
                 self._lines = np.reshape(np.asarray(lines), (-1, 4))  # type: ignore[arg-type]
             update_next = True
@@ -342,15 +349,15 @@ class DetectionBase:
 
         return update_next
 
-    def apply_threshold(self, threshold: int, update: bool = False) -> bool:
+    def apply_threshold(self, update: bool = False) -> bool:
         """
         Applies threshold filter.
 
-        :param threshold: Thresholding value.
         :param update: Update the shown image.
         :return: Whether the shown image needs further updates.
         """
         if update or len(self._image_thresh) == 0:
+            threshold = self.settings.edges.pixel_threshold
             _, self._image_thresh = cv2.threshold(self._image_gauss, threshold, 255, cv2.THRESH_BINARY)
             update_next = True
         else:
@@ -358,21 +365,10 @@ class DetectionBase:
 
         return update_next
 
-    def detect_features(self, feature_size_range: tuple[float, float], ellipse_size_range: tuple[float, float] = (0, 0),
-                        rectangular_size_range: tuple[float, float] = (0, 0), circularity_min: float = 0.5,
-                        angular_cutoff: float = 0.0, fit_ellipse: bool = True, fit_rect: bool = True,
-                        fit_crosshair: bool = True) -> list[FeatureInfo]:
+    def detect_features(self) -> list[FeatureInfo]:
         """
         Detect features i.e. ellipses, rectangular objects, and/or crosshairs.
 
-        :param ellipse_size_range: Allowable blob size range.
-        :param circularity_min: Allowable minimum blob circularity.
-        :param angular_cutoff: Maximum allowed slope definition.
-        :param feature_size_range: Allowable feature size range.
-        :param fit_ellipse: Flag to fit a circle to a blob or not.
-        :param fit_crosshair: Flag to fit a crosshair to a blob or not.
-        :param fit_rect: Flag to fit a rectangular object to a blob or not.
-        :param rectangular_size_range: Range of acceptable rect areas.
         :return: List of found features.
         """
         # Reset variables
@@ -380,21 +376,18 @@ class DetectionBase:
         self.found_features = []
 
         # Detect edges/contours
-        self._find_contours(feature_size_range)
+        self._find_contours()
 
         # Detect ellipses
-        if fit_ellipse:
-            self._find_ellipses(ellipse_size_range, circularity_min=circularity_min)
-        else:
-            self._find_ellipses(ellipse_size_range, circularity_min=circularity_min, include=False)
+        self._find_ellipses(include=self.settings.features.ellipse.fit_feature)
 
         # Detect crosshairs
-        if fit_crosshair:
-            self._find_crosshairs(angular_cutoff)
+        if self.settings.features.crosshair.fit_feature:
+            self._find_crosshairs()
 
         # Detect rects
-        if fit_rect:
-            self._find_rects(rectangular_size_range)
+        if self.settings.features.rectangle.fit_feature:
+            self._find_rects()
 
         return self.found_features
 

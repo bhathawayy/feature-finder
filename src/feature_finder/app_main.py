@@ -12,7 +12,8 @@ from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
                                QFileDialog, QMessageBox, QSlider, QSpinBox, QDoubleSpinBox, QAbstractSpinBox)
 
-from feature_finder.data_objects import DefaultSettings
+from feature_finder.data_objects import DetectionSettings
+from feature_finder import resources
 from feature_finder.data_processing import convert_color_bit, check_path, DetectionBase
 from feature_finder.interface.ui_form import Ui_featureFinder
 
@@ -36,11 +37,11 @@ class FeatureFinder(QWidget):
         self._display: Display = Display(self)
         self._logger: logging.Logger = logging.getLogger(__name__)
         self._raw_image: np.ndarray = np.array([])
-        self.detection_settings: DefaultSettings = DefaultSettings()
-        self.detector: DetectionBase | None = None
         self.drawn_image: np.ndarray = np.array([])
 
         # Startup routines for GUI
+        startup_image = cv2.imread(os.path.join(next(iter(resources.__path__)), "sample.png"), cv2.IMREAD_UNCHANGED)
+        self.detector: DetectionBase = DetectionBase(startup_image)
         self._startup()
 
     def _add_logger(self):
@@ -260,41 +261,59 @@ class FeatureFinder(QWidget):
         
         :return: None
         """
-        if self._raw_image.size > 0:
-            # Define file path
+        # Update UI
+        self.ui.save_status_label.setText("Saving...")
+        self.ui.save_status_label.setStyleSheet("color: black;")
+
+        # Attempt to save the image
+        if self._raw_image.size > 0 and self.drawn_image.size > 0:
+
+            # Check the image path
             file_path = os.path.join(os.path.dirname(self.ui.file_path_entry.toPlainText()), "ff_drawing.png")
+            checked_path = check_path(file_path)
+            checked_dir = os.path.dirname(checked_path)
 
-            # Attempt to save the image
-            if self.drawn_image.size > 0:
+            # Save the image with cv2
+            try:
+                if not os.path.isdir(checked_dir):
+                    os.makedirs(checked_dir)
+                cv2.imwrite(checked_path, self.drawn_image)
 
-                # Check the image path
-                checked_path = check_path(file_path)
-                checked_dir = os.path.dirname(checked_path)
+            except PermissionError: # handle permissions erro case
+                checked_dir = os.getcwd()
+                file_path = os.path.join(os.getcwd(), os.path.basename(file_path))
+                self._logger.warning(f"Lacking write permissions for this directory. Saving locally instead.")
+                cv2.imwrite(file_path, self.drawn_image)
 
-                # Save the image with cv2
-                try:
-                    if not os.path.isdir(checked_dir):
-                        os.makedirs(checked_dir)
-                    cv2.imwrite(checked_path, self.drawn_image)
-                except PermissionError:
-                    checked_dir = os.getcwd()
-                    file_path = os.path.join(os.getcwd(), os.path.basename(file_path))
-                    self._logger.warning(f"Lacking write permissions for this directory. Saving locally instead.")
-                    cv2.imwrite(file_path, self.drawn_image)
-                finally:
-                    self._logger.info(f"Image saved at: {file_path}")
+            finally: # log
+                self._logger.info(f"Image saved at: {file_path}")
 
-                # Save YAML files
-                self.detection_settings.to_yaml(os.path.join(checked_dir, "detection_settings.yaml"))
-                with open(os.path.join(checked_dir, "found_features.yaml"), "w") as f:
-                    features_dict = {}
-                    for idx, feature in enumerate(self.detector.found_features):
-                        feature_data = vars(feature).copy()
-                        if isinstance(feature_data.get('centroid'), tuple):
-                            feature_data['centroid'] = list(feature_data['centroid'])  # convert tuples to lists
-                        features_dict[f"feature_{idx}"] = feature_data
-                    yaml.dump(features_dict, f, default_flow_style=False, sort_keys=False)
-                self._logger.info(f"YAML files saved to: {file_path}")
+            # Save JSON settings file
+            json_path = os.path.join(checked_dir, "detection_settings.json")
+            self.detector.settings.to_file(json_path)
+            self._logger.info(f"Detection settings file saved to: {json_path}")
+
+            # Save YAML features file
+            yaml_path = os.path.join(checked_dir, "found_features.yaml")
+            with open(yaml_path, "w") as f:
+                features_dict = {}
+                for idx, feature in enumerate(self.detector.found_features):
+                    feature_data = vars(feature).copy()
+                    if isinstance(feature_data.get('centroid'), tuple):
+                        feature_data['centroid'] = list(feature_data['centroid'])  # convert tuples to lists
+                    features_dict[f"feature_{idx}"] = feature_data
+                yaml.dump(features_dict, f, default_flow_style=False, sort_keys=False)
+            self._logger.info(f"Found features file saved to: {yaml_path}")
+
+            # Update UI
+            self.ui.save_status_label.setText("Saved!")
+            self.ui.save_status_label.setStyleSheet("color: black;")
+
+        else:
+            # Log and update
+            self.ui.save_status_label.setText("No data!")
+            self.ui.save_status_label.setStyleSheet("color: red;")
+            self._logger.warning(f"No data to save.")
 
     def _dialog_and_log(self, message: str, button: int = 0, level: int = 0,
                         err_handle: Exception | None = None) -> int:
@@ -383,18 +402,18 @@ class FeatureFinder(QWidget):
                 set_value(get_target_name(widget_family_member.objectName(), "slider", "spin"), setting_handle)
                 set_value(get_target_name(widget_family_member.objectName(), "spin", "slider"), setting_handle)
 
-        settings = self.detection_settings
+        settings = self.detector.settings
 
-        set_widget_value(self.ui.distance_interval_slider, settings.crosshair_distance)
-        set_widget_value(self.ui.feature_max_size_slider, settings.feature_size_range)
-        set_widget_value(self.ui.gauss_blur_slider, settings.gauss_blur_kernel)
-        set_widget_value(self.ui.pixel_threshold_slider, settings.pixel_threshold)
-        set_widget_value(self.ui.elliptical_max_size_slider, settings.feature_size_range)
-        set_widget_value(self.ui.circularity_spin, settings.circularity_min, 100)
-        set_widget_value(self.ui.hough_threshold_spin, settings.crosshair_hough_threshold)
-        set_widget_value(self.ui.crosshair_min_length_spin, settings.crosshair_min_length)
-        set_widget_value(self.ui.crosshair_max_slope_spin, settings.crosshair_max_slope)
-        set_widget_value(self.ui.rect_max_size_slider, settings.feature_size_range)
+        set_widget_value(self.ui.distance_interval_slider, settings.features.crosshair.max_line_gap)
+        set_widget_value(self.ui.feature_max_size_slider, settings.edges.size_range)
+        set_widget_value(self.ui.gauss_blur_slider, settings.edges.gauss_blur_kernel)
+        set_widget_value(self.ui.pixel_threshold_slider, settings.edges.pixel_threshold)
+        set_widget_value(self.ui.elliptical_max_size_slider, settings.features.ellipse.size_range)
+        set_widget_value(self.ui.circularity_spin, settings.features.ellipse.circularity_min, float_slider_factor=100)
+        set_widget_value(self.ui.hough_threshold_spin, settings.features.crosshair.hough_threshold)
+        set_widget_value(self.ui.crosshair_min_length_spin, settings.features.crosshair.min_length)
+        set_widget_value(self.ui.crosshair_max_slope_spin, settings.features.crosshair.max_slope)
+        set_widget_value(self.ui.rect_max_size_slider, settings.features.rectangle.size_range)
 
     def _startup(self):
         """
@@ -417,66 +436,54 @@ class FeatureFinder(QWidget):
         
         :return: None
         """
+
+        def check_settings_value(property_value: Any, settings_handle, attribute_to_change: str) -> bool:
+            if property_value != settings_handle.__getattribute__(attribute_to_change):
+                settings_handle.__setattr__(attribute_to_change, property_value)
+                return True
+            else:
+                return False
+
         if self._raw_image.size > 0:
+
+            # Define local variables
+            edge_settings = self.detector.settings.edges
+            feature_settings = self.detector.settings.features
+
             # Pre-process image
-            update_next = self.detector.apply_gauss_blur(
-                self.gauss_blur_kernel,
-                update=(self.gauss_blur_kernel != self.detection_settings.gauss_blur_kernel)
-            )
-            update_next = self.detector.apply_threshold(
-                self.pixel_threshold,
-                update=(update_next or self.pixel_threshold != self.detection_settings.pixel_threshold)
-            )
+            update_gauss = check_settings_value(self.gauss_blur_kernel, edge_settings, "gauss_blur_kernel")
+            update_next = self.detector.apply_gauss_blur( update=update_gauss)
+
+            update_threshold = check_settings_value(self.pixel_threshold, edge_settings, "pixel_threshold")
+            update_next = self.detector.apply_threshold(update=update_threshold or update_next)
+
             if self.ui.crosshair_fit_check.isChecked():
-                self.detector.apply_hough_transform(
-                    self.crosshair_hough_threshold,
-                    self.crosshair_distance,
-                    self.crosshair_min_length,
-                    update=(update_next or
-                            self.crosshair_hough_threshold != self.detection_settings.crosshair_hough_threshold or
-                            self.crosshair_min_length != self.detection_settings.crosshair_min_length or
-                            self.crosshair_distance != self.detection_settings.crosshair_distance))
+                crosshair_settings = self.detector.settings.features.crosshair
+                update1 = check_settings_value(self.crosshair_hough_threshold, crosshair_settings, "hough_threshold")
+                update2 = check_settings_value(self.crosshair_min_length, crosshair_settings, "min_length")
+                update3 = check_settings_value(self.crosshair_distance, crosshair_settings, "max_line_gap")
+
+                self.detector.apply_hough_transform(update=update_next or any([update1, update2, update3]))
+
+            # Update referenced settings
+            edge_settings.size_range = self.feature_size_range
+            feature_settings.crosshair.fit_feature = self.ui.crosshair_fit_check.isChecked()
+            feature_settings.crosshair.max_slope = self.crosshair_max_slope
+            feature_settings.ellipse.circularity_min = self.circularity_min
+            feature_settings.ellipse.fit_feature = self.ui.elliptical_fit_check.isChecked()
+            feature_settings.ellipse.size_range = self.elliptical_size_range
+            feature_settings.rectangle.fit_feature = self.ui.rect_fit_check.isChecked()
+            feature_settings.rectangle.size_range = self.rectangular_size_range
 
             # Find and draw contours/detections
-            self.detector.detect_features(
-                self.feature_size_range,
-                ellipse_size_range=self.elliptical_size_range,
-                rectangular_size_range=self.rectangular_size_range,
-                circularity_min=self.circularity_min,
-                angular_cutoff=self.crosshair_max_slope,
-                fit_ellipse=self.ui.elliptical_fit_check.isChecked(),
-                fit_rect=self.ui.rect_fit_check.isChecked(),
-                fit_crosshair=self.ui.crosshair_fit_check.isChecked()
-            )
+            self.detector.detect_features()
             self.drawn_image = self.detector.display_image
 
-            # Update & log settings
-            self._update_stored_settings()
-            self._logger.info(
-                f"Updated image with settings:\n"
-                f"\tcircularity = {self.detection_settings.circularity_min}"
-                f"\tcrosshair distance = {self.detection_settings.crosshair_distance}"
-                f"\tcrosshair min. length = {self.detection_settings.crosshair_min_length}"
-                f"\tcrosshair max slope = {self.detection_settings.crosshair_max_slope}"
-                f"\telliptical size range = {self.detection_settings.elliptical_size_range}"
-                f"\tfeature size range = {self.detection_settings.feature_size_range}"
-                f"\tgauss blur kernel = {self.detection_settings.gauss_blur_kernel}"
-                f"\though threshold = {self.detection_settings.crosshair_hough_threshold}"
-                f"\tpixel threshold = {self.detection_settings.pixel_threshold}"
-                f"\trectangular size range = {self.detection_settings.rectangular_size_range}"
-            )
+            # Log settings
+            self._logger.info(f"Updated image with settings:\n{self.detector.settings.__dict__}")
 
             # Update stream window
             self._update_stream_window()
-
-    def _update_stored_settings(self):
-        """
-        Update stored settings based on UI.
-
-        :return: None
-        """
-        for setting in self.detection_settings.__dict__:
-            self.detection_settings.__setattr__(setting, self.__getattribute__(setting))
 
     def _update_stream_window(self):
         """
@@ -535,7 +542,7 @@ class FeatureFinder(QWidget):
         return int(self.ui.distance_interval_spin.value())
 
     @property
-    def elliptical_size_range(self) -> tuple[float, float]:
+    def elliptical_size_range(self) -> tuple[int, int]:
         """
         Selected range of detected elliptical sizes.
 
@@ -544,7 +551,7 @@ class FeatureFinder(QWidget):
         return self.ui.elliptical_min_size_slider.value(), self.ui.elliptical_max_size_slider.value()
 
     @property
-    def feature_size_range(self) -> tuple[float, float]:
+    def feature_size_range(self) -> tuple[int, int]:
         """
         Selected range of detected contour (rectangles or crosshairs) sizes.
 
@@ -593,7 +600,7 @@ class FeatureFinder(QWidget):
             return 1000000
 
     @property
-    def rectangular_size_range(self) -> tuple[float, float]:
+    def rectangular_size_range(self) -> tuple[int, int]:
         """
         Selected range of detected elliptical sizes.
 

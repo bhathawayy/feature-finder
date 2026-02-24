@@ -1,0 +1,34 @@
+{
+  "edges": {
+    "gauss_blur_kernel": 21,
+    "pixel_threshold": 150,
+    "size_range": [
+      0,
+      100000
+    ]
+  },
+  "features": {
+    "crosshair": {
+      "fit_feature": false,
+      "hough_threshold": 15,
+      "max_line_gap": 5,
+      "max_slope": 0.0,
+      "min_length": 10
+    },
+    "ellipse": {
+      "circularity_min": 0.6,
+      "fit_feature": false,
+      "size_range": [
+        0,
+        100000
+      ]
+    },
+    "rectangle": {
+      "fit_feature": true,
+      "size_range": [
+        0,
+        100000
+      ]
+    }
+  }
+}
