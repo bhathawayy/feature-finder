@@ -1,8 +1,8 @@
+import json
 import os
 from typing import Type, TypeVar, Optional
 
 import numpy as np
-import json
 from pydantic import BaseModel, ValidationError, Field
 
 T = TypeVar("T", bound="JSONConfig")
@@ -18,7 +18,6 @@ class CrosshairSettings(BaseModel):
 
 class EdgeSettings(BaseModel):
     gauss_blur_kernel: int = Field(default=21)  # Gaussian blur kernel size
-    normalize_noise: bool = Field(default=True)  # Flag for reducing noise by normalization
     pixel_threshold: int = Field(default=150)  # Explicit edge thresholding
     size_range: tuple[int, int] = Field(default=(0, 700000))  # Expected size of ANY feature [(pxl^2, pxl^2)]
 
@@ -108,7 +107,14 @@ class JSONConfig(BaseModel):
             raise PermissionError(f"File is not writable (may be opened elsewhere): {file_path}")
 
 
-class RectangleSettings(BaseModel):
+class NoiseSettings(BaseModel):
+    lower_percentile: int = Field(default=1)  # Lower normalization cutoff as percentile
+    normalize: bool = Field(default=True)  # Flag for reducing noise by normalization
+    upper_percentile: int = Field(default=99)  # Upper normalization cutoff as percentile
+    winsor_percentile: int = Field(default=85)  # Caps very bright pixels at the specified percentile
+
+
+class RectSettings(BaseModel):
     fit_feature: bool = Field(default=False)  # Flag for fitting feature to detections
     size_range: tuple[int, int] = Field(default=(0, 220000))  # Expected size of rectangular object [(pxl^2, pxl^2)]
 
@@ -118,7 +124,7 @@ class RectangleSettings(BaseModel):
 class FeatureSettings(BaseModel):
     crosshair: CrosshairSettings = Field(default=CrosshairSettings(), alias="crosshair")
     ellipse: EllipseSettings = Field(default=EllipseSettings(), alias="ellipse")
-    rectangle: RectangleSettings = Field(default=RectangleSettings(), alias="rectangle")
+    rectangle: RectSettings = Field(default=RectSettings(), alias="rectangle")
 
 
 # Level 2 Dependency ------------------------------------------------------------------------------------------------ #
@@ -126,3 +132,11 @@ class FeatureSettings(BaseModel):
 class DetectionSettings(JSONConfig):
     edges: EdgeSettings = Field(default=EdgeSettings(), alias="edges")
     features: FeatureSettings = Field(default=FeatureSettings(), alias="features")  # Container for feature settings
+    noise_handling: NoiseSettings = Field(default=NoiseSettings(), alias="noise_handling")
+
+
+if __name__ == "__main__":
+    from feature_finder import resources
+
+    # Reset settings file
+    DetectionSettings().to_file(os.path.join(next(iter(resources.__path__)), "detection_settings.json"))

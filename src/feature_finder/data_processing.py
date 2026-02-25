@@ -5,8 +5,6 @@ import cv2
 import numpy as np
 import math
 
-from typing_extensions import Any
-
 from feature_finder.data_objects import FeatureInfo, DetectionSettings
 
 
@@ -264,7 +262,7 @@ class DetectionBase:
 
         return int(val)
 
-    def _reset(self, reset_images: bool = True):
+    def _reset(self):
         """
         Reset variables that are internally referenced and built upon.
 
@@ -273,13 +271,7 @@ class DetectionBase:
         self._contours_all = []
         self._contours_non_blobs = []
         self._lines = np.array([])
-        self.display_image = self._image_rgb8.copy()
         self.found_features = []
-
-        if reset_images:
-            self._image_gauss = np.array([])
-            self._image_normal = np.array([])
-            self._image_thresh = np.array([])
 
     def apply_gauss_blur(self, update: bool = True) -> bool:
         """
@@ -337,23 +329,24 @@ class DetectionBase:
 
         return update_next
 
-    def detect_features(self, preprocess_image: bool = True) -> list[FeatureInfo]:
+    def detect_features(self, update_gauss: bool = True, update_threshold: bool = True, update_hough: bool = True) -> list[FeatureInfo]:
         """
         Detect features i.e. ellipses, rectangular objects, and/or crosshairs.
 
         :return: List of found features.
         """
         # Reset variables
-        self._reset(reset_images=preprocess_image)
+        self._reset()
 
         # Preprocess image (order matters!)
-        if preprocess_image:
-            if self.settings.edges.normalize_noise:
-                self.reduce_noise()
-            self.apply_gauss_blur()
-            self.apply_hough_transform()
-            if self.settings.features.crosshair.fit_feature:
-                self.apply_threshold()
+        if self.settings.noise_handling.normalize:
+            self.reduce_noise()
+        else:
+            self.display_image = self._image_rgb8.copy()
+        self.apply_gauss_blur(update=update_gauss)
+        self.apply_threshold(update=update_threshold)
+        if self.settings.features.crosshair.fit_feature:
+            self.apply_hough_transform(update=update_hough)
 
         # Detect edges/contours
         self._find_contours()
@@ -371,19 +364,22 @@ class DetectionBase:
 
         return self.found_features
 
-    def reduce_noise(self, bg_blur_ksize=61, clahe_clip=2.5, clahe_grid=8, tophat_ksize=21):
+    def reduce_noise(self):
         """
         Reduce noise in image with very dim features.
 
         :return: The 'enhanced' image.
         """
 
-        def winsorize(gray_image: np.ndarray, hi_pct: int = 85):
-            return np.clip(gray_image, 0, np.percentile(gray_image, hi_pct)).astype(np.uint8)
+        def winsorize(gray_image: np.ndarray):
+            winsor = self.settings.noise_handling.winsor_percentile
 
-        def normalize(gray_image: np.ndarray, lo: int = 1, hi: int = 99) -> np.ndarray:
+            return np.clip(gray_image, 0, np.percentile(gray_image, winsor)).astype(np.uint8)
+
+        def normalize(gray_image: np.ndarray) -> np.ndarray:
             normalized = gray_image.astype(np.float32)
-            p_lo, p_hi = np.percentile(normalized, (lo, hi))
+            p_lo, p_hi = np.percentile(normalized, (self.settings.noise_handling.lower_percentile,
+                                                    self.settings.noise_handling.upper_percentile))
             if p_hi <= p_lo + 1e-6:  # to prevent 0
                 return np.zeros_like(gray_image)
             else:

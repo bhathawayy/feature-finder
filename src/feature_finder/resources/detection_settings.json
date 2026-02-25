@@ -1,11 +1,10 @@
 {
   "edges": {
     "gauss_blur_kernel": 21,
-    "normalize_noise": true,
-    "pixel_threshold": 90,
+    "pixel_threshold": 40,
     "size_range": [
       100,
-      100000
+      1000000
     ]
   },
   "features": {
@@ -21,15 +20,21 @@
       "fit_feature": false,
       "size_range": [
         0,
-        100000
+        220000
       ]
     },
     "rectangle": {
       "fit_feature": false,
       "size_range": [
         0,
-        100000
+        220000
       ]
     }
+  },
+  "noise_handling": {
+    "lower_percentile": 50,
+    "normalize": true,
+    "upper_percentile": 99,
+    "winsor_percentile": 85
   }
 }
