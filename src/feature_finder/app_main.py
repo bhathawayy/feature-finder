@@ -96,7 +96,7 @@ class FeatureFinder(QWidget):
                 lambda sb=spin_box, attr=spin_box_to_property_map[spin_box]: self._change_spin(sb, attr))
 
         # Buttons / Check boxes
-        self.ui.elliptical_fit_check.clicked.connect(self._click_enable_circle_fitting)
+        self.ui.elliptical_fit_check.clicked.connect(self._click_enable_elliptical_fitting)
         self.ui.crosshair_fit_check.clicked.connect(self._click_enable_crosshair_fitting)
         self.ui.file_path_browse_button.clicked.connect(self._click_browse_file)
         self.ui.rect_fit_check.clicked.connect(self._click_enable_rectangular_fitting)
@@ -228,7 +228,7 @@ class FeatureFinder(QWidget):
                 # Update the stream window to show imported image
                 self._update_image()
 
-    def _click_enable_circle_fitting(self):
+    def _click_enable_elliptical_fitting(self):
         """
         Enable controls if fitting is enabled.
 
@@ -402,18 +402,29 @@ class FeatureFinder(QWidget):
                 set_value(get_target_name(widget_family_member.objectName(), "slider", "spin"), setting_handle)
                 set_value(get_target_name(widget_family_member.objectName(), "spin", "slider"), setting_handle)
 
-        settings = self.detector.settings
+        # Define local variables
+        edge_settings = self.detector.settings.edges
+        feature_settings = self.detector.settings.features
 
-        set_widget_value(self.ui.distance_interval_slider, settings.features.crosshair.max_line_gap)
-        set_widget_value(self.ui.feature_max_size_slider, settings.edges.size_range)
-        set_widget_value(self.ui.gauss_blur_slider, settings.edges.gauss_blur_kernel)
-        set_widget_value(self.ui.pixel_threshold_slider, settings.edges.pixel_threshold)
-        set_widget_value(self.ui.elliptical_max_size_slider, settings.features.ellipse.size_range)
-        set_widget_value(self.ui.circularity_spin, settings.features.ellipse.circularity_min, float_slider_factor=100)
-        set_widget_value(self.ui.hough_threshold_spin, settings.features.crosshair.hough_threshold)
-        set_widget_value(self.ui.crosshair_min_length_spin, settings.features.crosshair.min_length)
-        set_widget_value(self.ui.crosshair_max_slope_spin, settings.features.crosshair.max_slope)
-        set_widget_value(self.ui.rect_max_size_slider, settings.features.rectangle.size_range)
+        # Set sliders
+        set_widget_value(self.ui.distance_interval_slider, feature_settings.crosshair.max_line_gap)
+        set_widget_value(self.ui.feature_max_size_slider, edge_settings.size_range)
+        set_widget_value(self.ui.gauss_blur_slider, edge_settings.gauss_blur_kernel)
+        set_widget_value(self.ui.pixel_threshold_slider, edge_settings.pixel_threshold)
+        set_widget_value(self.ui.elliptical_max_size_slider, feature_settings.ellipse.size_range)
+        set_widget_value(self.ui.circularity_spin, feature_settings.ellipse.circularity_min, float_slider_factor=100)
+        set_widget_value(self.ui.hough_threshold_spin, feature_settings.crosshair.hough_threshold)
+        set_widget_value(self.ui.crosshair_min_length_spin, feature_settings.crosshair.min_length)
+        set_widget_value(self.ui.crosshair_max_slope_spin, feature_settings.crosshair.max_slope)
+        set_widget_value(self.ui.rect_max_size_slider, feature_settings.rectangle.size_range)
+
+        # Set check boxes
+        self.ui.crosshair_fit_check.setChecked(feature_settings.crosshair.fit_feature)
+        self.ui.elliptical_fit_check.setChecked(feature_settings.ellipse.fit_feature)
+        self.ui.rect_fit_check.setChecked(feature_settings.rectangle.fit_feature)
+        if feature_settings.crosshair.fit_feature: self._click_enable_crosshair_fitting()
+        if feature_settings.ellipse.fit_feature: self._click_enable_elliptical_fitting()
+        if feature_settings.rectangle.fit_feature: self._click_enable_rectangular_fitting()
 
     def _startup(self):
         """

@@ -1,9 +1,9 @@
 {
   "edges": {
     "gauss_blur_kernel": 21,
-    "pixel_threshold": 150,
+    "pixel_threshold": 90,
     "size_range": [
-      0,
+      100,
       100000
     ]
   },
@@ -24,7 +24,7 @@
       ]
     },
     "rectangle": {
-      "fit_feature": true,
+      "fit_feature": false,
       "size_range": [
         0,
         100000
