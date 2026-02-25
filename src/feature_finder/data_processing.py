@@ -311,7 +311,7 @@ class DetectionBase:
 
         return brightened_image
 
-    def apply_gauss_blur(self, update: bool = False) -> bool:
+    def apply_gauss_blur(self, update: bool = True) -> bool:
         """
         Applies Gaussian blur filter.
 
@@ -330,7 +330,7 @@ class DetectionBase:
 
         return update_next
 
-    def apply_hough_transform(self, update: bool = False) -> bool:
+    def apply_hough_transform(self, update: bool = True) -> bool:
         """
         Applies Hough Transform filter.
 
@@ -350,7 +350,7 @@ class DetectionBase:
 
         return update_next
 
-    def apply_threshold(self, update: bool = False) -> bool:
+    def apply_threshold(self, update: bool = True) -> bool:
         """
         Applies threshold filter.
 

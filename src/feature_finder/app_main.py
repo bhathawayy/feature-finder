@@ -452,7 +452,7 @@ class FeatureFinder(QWidget):
 
             # Pre-process image
             update_gauss = check_settings_value(self.gauss_blur_kernel, edge_settings, "gauss_blur_kernel")
-            update_next = self.detector.apply_gauss_blur( update=update_gauss)
+            update_next = self.detector.apply_gauss_blur(update=update_gauss)
 
             update_threshold = check_settings_value(self.pixel_threshold, edge_settings, "pixel_threshold")
             update_next = self.detector.apply_threshold(update=update_threshold or update_next)
