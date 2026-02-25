@@ -1,6 +1,7 @@
 {
   "edges": {
     "gauss_blur_kernel": 21,
+    "normalize_noise": true,
     "pixel_threshold": 90,
     "size_range": [
       100,

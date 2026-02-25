@@ -462,6 +462,8 @@ class FeatureFinder(QWidget):
             feature_settings = self.detector.settings.features
 
             # Pre-process image
+            if edge_settings.normalize_noise:
+                self.detector.reduce_noise()
             update_gauss = check_settings_value(self.gauss_blur_kernel, edge_settings, "gauss_blur_kernel")
             update_next = self.detector.apply_gauss_blur(update=update_gauss)
 

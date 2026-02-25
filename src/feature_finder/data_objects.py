@@ -18,6 +18,7 @@ class CrosshairSettings(BaseModel):
 
 class EdgeSettings(BaseModel):
     gauss_blur_kernel: int = Field(default=21)  # Gaussian blur kernel size
+    normalize_noise: bool = Field(default=True)  # Flag for reducing noise by normalization
     pixel_threshold: int = Field(default=150)  # Explicit edge thresholding
     size_range: tuple[int, int] = Field(default=(0, 700000))  # Expected size of ANY feature [(pxl^2, pxl^2)]
 

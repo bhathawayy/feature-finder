@@ -293,7 +293,8 @@ class DetectionBase:
             gauss = self._make_odd(self.settings.edges.gauss_blur_kernel)
 
             # Process image
-            self._image_gauss = cv2.GaussianBlur(self._image_mono8, (gauss, gauss), sigmaX=1)
+            image_to_process = self._image_mono8 if self._image_normal.size == 0 else self._image_normal
+            self._image_gauss = cv2.GaussianBlur(image_to_process, (gauss, gauss), sigmaX=1)
             update_next = True
         else:
             update_next = False
@@ -347,6 +348,8 @@ class DetectionBase:
 
         # Preprocess image (order matters!)
         if preprocess_image:
+            if self.settings.edges.normalize_noise:
+                self.reduce_noise()
             self.apply_gauss_blur()
             self.apply_hough_transform()
             if self.settings.features.crosshair.fit_feature:
@@ -367,6 +370,31 @@ class DetectionBase:
             self._find_rects()
 
         return self.found_features
+
+    def reduce_noise(self, bg_blur_ksize=61, clahe_clip=2.5, clahe_grid=8, tophat_ksize=21):
+        """
+        Reduce noise in image with very dim features.
+
+        :return: The 'enhanced' image.
+        """
+
+        def winsorize(gray_image: np.ndarray, hi_pct: int = 85):
+            return np.clip(gray_image, 0, np.percentile(gray_image, hi_pct)).astype(np.uint8)
+
+        def normalize(gray_image: np.ndarray, lo: int = 1, hi: int = 99) -> np.ndarray:
+            normalized = gray_image.astype(np.float32)
+            p_lo, p_hi = np.percentile(normalized, (lo, hi))
+            if p_hi <= p_lo + 1e-6:  # to prevent 0
+                return np.zeros_like(gray_image)
+            else:
+                normalized = (normalized - p_lo) * (255 / (p_hi - p_lo))
+                normalized = np.clip(normalized, 0, 255).astype(np.uint8)
+
+            return normalized
+
+        # Normalize image
+        self._image_normal = normalize(winsorize(self._image_mono8))
+        self.display_image = convert_color_bit(self._image_normal.copy(), color_channels=3, out_bit_depth=8)
 
 
 def check_path(target_path: str, overwrite: bool = True) -> str:
