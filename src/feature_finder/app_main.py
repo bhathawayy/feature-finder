@@ -476,7 +476,7 @@ class FeatureFinder(QWidget):
             feature_settings.rectangle.size_range = self.rectangular_size_range
 
             # Find and draw contours/detections
-            self.detector.detect_features()
+            self.detector.detect_features(preprocess_image=False)
             self.drawn_image = self.detector.display_image
 
             # Log settings

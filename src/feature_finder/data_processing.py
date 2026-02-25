@@ -264,52 +264,22 @@ class DetectionBase:
 
         return int(val)
 
-    def _reduce_noise(self, sigma: int = 1500) -> np.ndarray:
+    def _reset(self, reset_images: bool = True):
         """
-        Reduce noise by increasing dark patterns and ignoring background contributions.
+        Reset variables that are internally referenced and built upon.
 
-        :param sigma: Gaussian shape for brightness multiplication.
-        :return: 'brightened' image
+        :return: None
         """
-        # Set local variables
-        bit_max = 2 ** 8 - 1
-        image = self._image_mono8 / bit_max
+        self._contours_all = []
+        self._contours_non_blobs = []
+        self._lines = np.array([])
+        self.display_image = self._image_rgb8.copy()
+        self.found_features = []
 
-        # Create a 2D Gaussian kernel
-        h, w = image.shape
-        y, x = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
-        center_x, center_y = w // 2, h // 2
-        gaussian_kernel = 1 - np.exp(-((x - center_x) ** 2 + (y - center_y) ** 2) / (2 * sigma ** 2))
-
-        # Normalize the kernel to sum to 1 for smoothing effect
-        gaussian_kernel /= np.max(gaussian_kernel)
-
-        # Find local minima (troughs) in the histogram
-        histogram, bin_edges = np.histogram(image.flatten(), bins=(bit_max + 1), range=(0, bit_max))
-        trough_indices = argrelmin(histogram)[0]  # Indices of local minima
-
-        # Get the first trough index and its corresponding pixel intensity
-        if len(trough_indices) > 0:
-            first_trough_index = trough_indices[0]
-            first_trough_intensity = bin_edges[first_trough_index]
-            pixel_floor_percent = max(0.01, min(1, first_trough_intensity / bit_max))
-        else:
-            pixel_floor_percent = 0.05
-
-        # Create a mask for darker squares
-        mask = (image > pixel_floor_percent / 2) & (image < 0.5)
-
-        # Apply the Gaussian kernel selectively to brighten darker squares
-        brightened_image = image.copy()
-        brightened_image[mask] = np.clip(brightened_image[mask] + gaussian_kernel[mask] * 0.1, 0, 1)
-
-        # Keep bright squares unchanged
-        brightened_image[~mask] = image[~mask]
-
-        # Scale back to 8-bit range
-        brightened_image = np.clip(brightened_image * bit_max, 0, 255).astype(np.uint8)
-
-        return brightened_image
+        if reset_images:
+            self._image_gauss = np.array([])
+            self._image_normal = np.array([])
+            self._image_thresh = np.array([])
 
     def apply_gauss_blur(self, update: bool = True) -> bool:
         """
@@ -366,15 +336,21 @@ class DetectionBase:
 
         return update_next
 
-    def detect_features(self) -> list[FeatureInfo]:
+    def detect_features(self, preprocess_image: bool = True) -> list[FeatureInfo]:
         """
         Detect features i.e. ellipses, rectangular objects, and/or crosshairs.
 
         :return: List of found features.
         """
         # Reset variables
-        self.display_image = self._image_rgb8.copy()
-        self.found_features = []
+        self._reset(reset_images=preprocess_image)
+
+        # Preprocess image (order matters!)
+        if preprocess_image:
+            self.apply_gauss_blur()
+            self.apply_hough_transform()
+            if self.settings.features.crosshair.fit_feature:
+                self.apply_threshold()
 
         # Detect edges/contours
         self._find_contours()
