@@ -688,6 +688,7 @@ class FeatureFinder(QWidget):
         """
         return int(self.ui.winsor_percentile_spin.value())
 
+
 class Display(QGraphicsView):
 
     def __init__(self, parent: FeatureFinder = None):

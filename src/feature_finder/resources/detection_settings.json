@@ -1,13 +1,21 @@
 {
   "edges": {
     "gauss_blur_kernel": 21,
-    "pixel_threshold": 40,
+    "pixel_threshold": 150,
     "size_range": [
       100,
       1000000
     ]
   },
   "features": {
+    "arch": {
+      "fit_feature": false,
+      "min_u_score": 0.0,
+      "size_range": [
+        0,
+        500000
+      ]
+    },
     "crosshair": {
       "fit_feature": false,
       "hough_threshold": 15,
@@ -20,20 +28,20 @@
       "fit_feature": false,
       "size_range": [
         0,
-        220000
+        500000
       ]
     },
     "rectangle": {
       "fit_feature": false,
       "size_range": [
         0,
-        220000
+        500000
       ]
     }
   },
   "noise_handling": {
     "lower_percentile": 50,
-    "normalize": true,
+    "normalize": false,
     "upper_percentile": 99,
     "winsor_percentile": 85
   }

@@ -220,7 +220,7 @@ class DetectionBase:
         size_range = self.settings.features.rectangle.size_range
         for contour, approx, contour_area, contour_perimeter in self._contours_non_blobs:
 
-            # Filter based on rectangle size
+            # Filter based on size
             box = cv2.boxPoints(cv2.minAreaRect(contour)).astype(int)
             shape_area = cv2.contourArea(box)
             if size_range[0] <= shape_area <= size_range[1] and len(approx) == 4:  # prevent rect fitting of crosshairs
