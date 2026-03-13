@@ -1,6 +1,22 @@
 {
   "edges": {
+    "canny_edge_range": [
+      0,
+      100
+    ],
+    "flag_canny_edged": false,
+    "flag_invert_image": false,
+    "flag_reduce_noise": false,
+    "flag_show_processed_image": false,
     "gauss_blur_kernel": 21,
+    "noise_handling": {
+      "clahe_clip": 2.5,
+      "clahe_grid_size": 8,
+      "lower_percentile": 1,
+      "tophat_ksize": 21,
+      "upper_percentile": 99,
+      "winsor_percentile": 85
+    },
     "pixel_threshold": 150,
     "size_range": [
       100,
@@ -10,7 +26,7 @@
   "features": {
     "arch": {
       "fit_feature": false,
-      "min_u_score": 0.0,
+      "min_u_score": 0.5,
       "size_range": [
         0,
         500000
@@ -38,11 +54,5 @@
         500000
       ]
     }
-  },
-  "noise_handling": {
-    "lower_percentile": 50,
-    "normalize": false,
-    "upper_percentile": 99,
-    "winsor_percentile": 85
   }
 }
