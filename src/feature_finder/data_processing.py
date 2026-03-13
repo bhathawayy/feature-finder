@@ -1,9 +1,9 @@
+import math
 import os
 import warnings
 
 import cv2
 import numpy as np
-import math
 
 from feature_finder.data_objects import FeatureInfo, DetectionSettings
 
@@ -17,6 +17,7 @@ class DetectionBase:
         :param image_array: Image array for processing.
         """
         # Set class variables
+        self._color_arch: tuple[int, int, int] = (255, 255, 0)  # Color for arches [BGR]
         self._color_blob: tuple[int, int, int] = (0, 255, 0)  # Color for blobs [BGR]
         self._color_edge: tuple[int, int, int] = (0, 0, 255)  # Color for edges [BGR]
         self._color_line_h: tuple[int, int, int] = (255, 0, 255)  # Color for horizontal lines [BGR]
@@ -55,44 +56,130 @@ class DetectionBase:
         else:
             raise FileNotFoundError("Improper image input!")
 
-    def _find_ellipses(self, include: bool = True):
-        """
-        Once contours have found, search for blobs, then draw these on the debug image.
+    def _find_arches(self):
 
-        :param include: Flag to include feature in findings or just use the non-blob contours.
-        :return: None.
-        """
-        self._contours_non_blobs = []
-        size_range = self.settings.features.ellipse.size_range
-        for contour, approx, contour_area, contour_perimeter in self._contours_all:
+        def find_open_side_using_convexity_defect(cnt):
+            # Ensure correct shape
+            if len(cnt.shape) == 2:
+                cnt = cnt.reshape(-1, 1, 2)
 
-            # Sort according to circularity
-            circularity = contour_area / cv2.contourArea(cv2.convexHull(contour))
-            if circularity >= self.settings.features.ellipse.circularity_min and len(approx) > 4:  # prevent circle fitting of rects
+            cnt = cnt.astype(np.int32)
 
-                # Filter based on circle size
-                circle = np.array([pnt[0] for pnt in approx])
-                shape_area = cv2.contourArea(circle)
-                if size_range[0] <= shape_area <= size_range[1] and include:
+            hull = cv2.convexHull(cnt, returnPoints=False)
+            if hull is None or len(hull) < 3:
+                return None  # no hull or too small contour
 
-                    # Fit & draw ellipse
-                    (cx, cy), (w, h), angle = cv2.fitEllipse(contour)
-                    cv2.ellipse(self.display_image, ((cx, cy), (w, h), angle), self._color_blob, self._draw_size)
+            defects = cv2.convexityDefects(cnt, hull)
+            if defects is None or len(defects) == 0:
+                return None  # no defects found
+
+            max_defect = max(defects, key=lambda d: d[0][3])
+            start_idx, end_idx, far_idx, depth = max_defect[0]
+            far_point = cnt[far_idx][0]
+
+            y_min = cnt[:, 0, 1].min()
+            y_max = cnt[:, 0, 1].max()
+
+            if abs(far_point[1] - y_min) < abs(far_point[1] - y_max):
+                return "top"
+            else:
+                return "bottom"
+
+        def get_u_score(cnt) -> tuple[float, str]:
+
+            def curvature_score(pts):
+                # Use only bottom 30%
+                y = pts[:, 1]
+                y_max = y.max()
+                bottom = pts[y > y_max - 0.3 * (y.max() - y.min())]
+
+                if len(bottom) < 10:
+                    return 0
+
+                (x, y), radius = cv2.minEnclosingCircle(bottom)
+
+                # measure radial variance
+                distances = np.sqrt((bottom[:, 0] - x) ** 2 + (bottom[:, 1] - y) ** 2)
+                return 1.0 / (1.0 + np.std(distances))
+
+            def parallel_score(pts):
+                x = pts[:, 0]
+                mid = np.median(x)
+
+                left = pts[x < mid]
+                right = pts[x >= mid]
+
+                if len(left) < 10 or len(right) < 10:
+                    return 0
+
+                # Fit line to each side
+                [vx1, vy1, _, _] = cv2.fitLine(left, cv2.DIST_L2, 0, 0.01, 0.01)
+                [vx2, vy2, _, _] = cv2.fitLine(right, cv2.DIST_L2, 0, 0.01, 0.01)
+
+                # Compute angle difference
+                dot = abs(vx1 * vx2 + vy1 * vy2)
+                if isinstance(dot, (list, np.ndarray)):
+                    if len(dot) == 1:
+                        dot = dot[0]
+                    else:
+                        print("WHAT")
+
+                return float(dot)
+
+            def openness_score():
+                pts = cnt.reshape(-1, 2)
+                y = pts[:, 1]
+                y_min, y_max = y.min(), y.max()
+
+                top = pts[y < y_min + 0.3 * (y_max - y_min)]
+                return np.ptp(top[:, 0])  # larger gap = more open
+
+            def get_lower_u_shape(percentile: int = 90):
+                pts = cnt.reshape(-1, 2)
+                y = pts[:, 1]
+
+                y_min, y_max = y.min(), y.max()
+                cutoff = y_min + (100 - percentile) / 100 * (y_max - y_min)
+
+                lower = pts[y > cutoff]
+                return lower
+
+            curved_side = find_open_side_using_convexity_defect(cnt)
+            lower_part = get_lower_u_shape()
+
+            c = curvature_score(lower_part)
+            p = parallel_score(lower_part)
+            o = openness_score()
+
+            score = 0.5 * c + 0.3 * p + 0.2 * o
+
+            return score, curved_side
+
+        size_range = self.settings.feature_fitting.arch.arch_size_range
+        for contour, approx, contour_area, contour_perimeter in self._contours_non_blobs:
+
+            # Filter based on size
+            box = cv2.boxPoints(cv2.minAreaRect(contour)).astype(int)
+            shape_area = cv2.contourArea(box)
+            if size_range[0] <= shape_area <= size_range[1] and len(approx) > 4:  # prevent rect fitting of crosshairs
+                u_score, _ = get_u_score(contour)
+
+                # Filter based on U-score
+                if u_score >= self.settings.feature_fitting.arch.arch_min_u_score:
+                    # Draw shape
+                    cv2.drawContours(self.display_image, [box], 0, self._color_arch, self._draw_size)
 
                     # Save to found
                     self.found_features.append(
                         FeatureInfo(
                             area=round(shape_area, self._sig_fig),
-                            centroid=(int(cx), int(cy)),
-                            height=round(h, self._sig_fig),
-                            rotation=round(angle, self._sig_fig),
-                            shape_type="circle" if abs(min(w, h) / max(w, h)) > 0.95 else "ellipse",
-                            width=round(w, self._sig_fig)
+                            centroid=(int(0), int(0)),
+                            height=round(0, self._sig_fig),
+                            rotation=round(0, self._sig_fig),
+                            shape_type="arch",
+                            width=round(0, self._sig_fig)
                         )
                     )
-
-            else:
-                self._contours_non_blobs.append((contour, approx, contour_area, contour_perimeter))
 
     def _find_contours(self):
         """
@@ -105,7 +192,7 @@ class DetectionBase:
 
         # Filter edges/contours
         self._contours_all = []
-        size_range = self.settings.edges.size_range
+        size_range = self.settings.edge_detection.contour_size_range
         for contour in contours_found:
 
             # Filter based on largest range of acceptable sizes
@@ -114,7 +201,6 @@ class DetectionBase:
                 continue
             area = cv2.contourArea(contour)
             if size_range[0] < area <= size_range[1]:
-
                 # Show edge detection
                 approx = cv2.approxPolyDP(contour, 1, True)
                 cv2.drawContours(self.display_image, [approx], 0, self._color_edge,
@@ -151,17 +237,17 @@ class DetectionBase:
 
         def is_duplicate(new_feature):
             for existing in self.found_features:
-                if (existing.area == new_feature.area and 
-                    existing.width == new_feature.width and 
-                    existing.height == new_feature.height and 
-                    existing.rotation == new_feature.rotation):
-                    dist = np.sqrt((existing.centroid[0] - new_feature.centroid[0])**2 + 
-                                   (existing.centroid[1] - new_feature.centroid[1])**2)
+                if (existing.area == new_feature.area and
+                        existing.width == new_feature.width and
+                        existing.height == new_feature.height and
+                        existing.rotation == new_feature.rotation):
+                    dist = np.sqrt((existing.centroid[0] - new_feature.centroid[0]) ** 2 +
+                                   (existing.centroid[1] - new_feature.centroid[1]) ** 2)
                     if dist <= 50:
                         return True
             return False
 
-        angular_cutoff = self.settings.features.crosshair.max_slope
+        angular_cutoff = self.settings.feature_fitting.crosshair.crosshair_max_slope
         self._crosshair_centers = []
         for i, line1 in enumerate(self._lines):
             ep11, ep12, dx1, dy1, angle1, color1 = sort_into_slope_category(line1)  # ep = end-point
@@ -192,13 +278,13 @@ class DetectionBase:
                             for line_length, angle in [[line1_length, angle1], [line2_length, angle2]]:
                                 if angular_cutoff == 0 or abs(angle) < angular_cutoff:
                                     data = FeatureInfo(
-                                            area=round(line_length, self._sig_fig),
-                                            centroid=(int(ix), int(iy)),
-                                            height=0 if angle < 1 else round(line_length, self._sig_fig),
-                                            rotation=round(angle, self._sig_fig),
-                                            shape_type=f"{'horizontal' if angle < 1 else 'vertical'} line",
-                                            width=round(line_length, self._sig_fig) if angle < 1 else 0
-                                        )
+                                        area=round(line_length, self._sig_fig),
+                                        centroid=(int(ix), int(iy)),
+                                        height=0 if angle < 1 else round(line_length, self._sig_fig),
+                                        rotation=round(angle, self._sig_fig),
+                                        shape_type=f"{'horizontal' if angle < 1 else 'vertical'} line",
+                                        width=round(line_length, self._sig_fig) if angle < 1 else 0
+                                    )
                                     if not is_duplicate(data):
                                         self.found_features.append(data)
 
@@ -206,7 +292,46 @@ class DetectionBase:
                             if angular_cutoff == 0 or abs(angle1) < angular_cutoff:
                                 cv2.line(self.display_image, ep11, ep12, color1, self._draw_size)
                             if angular_cutoff == 0 or abs(angle2) < angular_cutoff:
-                                            cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
+                                cv2.line(self.display_image, ep21, ep22, color2, self._draw_size)
+
+    def _find_ellipses(self, include: bool = True):
+        """
+        Once contours have found, search for blobs, then draw these on the debug image.
+
+        :param include: Flag to include feature in findings or just use the non-blob contours.
+        :return: None.
+        """
+        self._contours_non_blobs = []
+        size_range = self.settings.feature_fitting.ellipse.elliptical_size_range
+        for contour, approx, contour_area, contour_perimeter in self._contours_all:
+
+            # Sort according to circularity
+            circularity = contour_area / cv2.contourArea(cv2.convexHull(contour))
+            if circularity >= self.settings.feature_fitting.ellipse.elliptical_circularity_min and len(
+                    approx) > 4:  # prevent circle fitting of rects
+
+                # Filter based on circle size
+                circle = np.array([pnt[0] for pnt in approx])
+                shape_area = cv2.contourArea(circle)
+                if size_range[0] <= shape_area <= size_range[1] and include:
+                    # Fit & draw ellipse
+                    (cx, cy), (w, h), angle = cv2.fitEllipse(contour)
+                    cv2.ellipse(self.display_image, ((cx, cy), (w, h), angle), self._color_blob, self._draw_size)
+
+                    # Save to found
+                    self.found_features.append(
+                        FeatureInfo(
+                            area=round(shape_area, self._sig_fig),
+                            centroid=(int(cx), int(cy)),
+                            height=round(h, self._sig_fig),
+                            rotation=round(angle, self._sig_fig),
+                            shape_type="circle" if abs(min(w, h) / max(w, h)) > 0.95 else "ellipse",
+                            width=round(w, self._sig_fig)
+                        )
+                    )
+
+            else:
+                self._contours_non_blobs.append((contour, approx, contour_area, contour_perimeter))
 
     def _find_rects(self):
         """
@@ -214,10 +339,11 @@ class DetectionBase:
 
         :return: None
         """
+
         def distance(p1: tuple[float | int, float | int], p2: tuple[float | int, float | int]) -> float:
             return round(math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2), self._sig_fig)
 
-        size_range = self.settings.features.rectangle.size_range
+        size_range = self.settings.feature_fitting.rectangle.rectangular_size_range
         for contour, approx, contour_area, contour_perimeter in self._contours_non_blobs:
 
             # Filter based on size
@@ -282,7 +408,7 @@ class DetectionBase:
         """
         if update or len(self._image_gauss) == 0:
             # Check input
-            gauss = self._make_odd(self.settings.edges.gauss_blur_kernel)
+            gauss = self._make_odd(self.settings.edge_detection.edge_gauss_blur_kernel)
 
             # Process image
             image_to_process = self._image_mono8 if self._image_normal.size == 0 else self._image_normal
@@ -302,9 +428,9 @@ class DetectionBase:
         """
         if update or len(self._lines) == 0:
             lines: np.ndarray | None = cv2.HoughLinesP(self._image_thresh, 1, np.pi / 180,
-                                                       maxLineGap=self.settings.features.crosshair.max_line_gap,
-                                                       threshold=self.settings.features.crosshair.hough_threshold,
-                                                       minLineLength=self.settings.features.crosshair.min_length)
+                                                       maxLineGap=self.settings.feature_fitting.crosshair.crosshair_max_line_gap,
+                                                       threshold=self.settings.feature_fitting.crosshair.crosshair_hough_threshold,
+                                                       minLineLength=self.settings.feature_fitting.crosshair.crosshair_min_length)
             if lines is not None:
                 self._lines = np.reshape(np.asarray(lines), (-1, 4))  # type: ignore[arg-type]
             update_next = True
@@ -321,7 +447,7 @@ class DetectionBase:
         :return: Whether the shown image needs further updates.
         """
         if update or len(self._image_thresh) == 0:
-            threshold = self.settings.edges.pixel_threshold
+            threshold = self.settings.edge_detection.edge_pixel_threshold
             _, self._image_thresh = cv2.threshold(self._image_gauss, threshold, 255, cv2.THRESH_BINARY)
             update_next = True
         else:
@@ -329,7 +455,8 @@ class DetectionBase:
 
         return update_next
 
-    def detect_features(self, update_gauss: bool = True, update_threshold: bool = True, update_hough: bool = True) -> list[FeatureInfo]:
+    def detect_features(self, update_gauss: bool = True, update_threshold: bool = True, update_hough: bool = True) -> \
+    list[FeatureInfo]:
         """
         Detect features i.e. ellipses, rectangular objects, and/or crosshairs.
 
@@ -339,27 +466,29 @@ class DetectionBase:
         self._reset()
 
         # Preprocess image (order matters!)
-        if self.settings.noise_handling.normalize:
-            self.reduce_noise()
+        if self.settings.edge_detection.flag_invert_image:
+            self._image_mono8 = ~self._image_mono8
+        if self.settings.edge_detection.flag_reduce_noise:
+            self.reduce_noise()  # resets self.display_image
         else:
             self.display_image = self._image_rgb8.copy()
         self.apply_gauss_blur(update=update_gauss)
         self.apply_threshold(update=update_threshold)
-        if self.settings.features.crosshair.fit_feature:
+        if self.settings.feature_fitting.crosshair.flag_fit_feature:
             self.apply_hough_transform(update=update_hough)
+        if self.settings.edge_detection.flag_show_processed:
+            self.display_image = convert_color_bit(self._image_thresh, color_channels=3)
 
         # Detect edges/contours
         self._find_contours()
 
-        # Detect ellipses
-        self._find_ellipses(include=self.settings.features.ellipse.fit_feature)
-
-        # Detect crosshairs
-        if self.settings.features.crosshair.fit_feature:
+        # Detect features
+        self._find_ellipses(include=self.settings.feature_fitting.ellipse.flag_fit_feature)
+        if self.settings.feature_fitting.arch.flag_fit_feature:
+            self._find_arches()
+        if self.settings.feature_fitting.crosshair.flag_fit_feature:
             self._find_crosshairs()
-
-        # Detect rects
-        if self.settings.features.rectangle.fit_feature:
+        if self.settings.feature_fitting.rectangle.flag_fit_feature:
             self._find_rects()
 
         return self.found_features
@@ -372,25 +501,59 @@ class DetectionBase:
         """
 
         def winsorize(gray_image: np.ndarray):
-            winsor = self.settings.noise_handling.winsor_percentile
+            winsor = self.settings.edge_detection.noise_handling.noise_winsor_percentile
 
             return np.clip(gray_image, 0, np.percentile(gray_image, winsor)).astype(np.uint8)
 
-        def normalize(gray_image: np.ndarray) -> np.ndarray:
-            normalized = gray_image.astype(np.float32)
-            p_lo, p_hi = np.percentile(normalized, (self.settings.noise_handling.lower_percentile,
-                                                    self.settings.noise_handling.upper_percentile))
+        def normalize(image_array: np.ndarray) -> np.ndarray:
+            normalized = image_array.astype(np.float32)
+            p_lo, p_hi = np.percentile(normalized, self.settings.edge_detection.noise_handling.noise_percentile_range)
             if p_hi <= p_lo + 1e-6:  # to prevent 0
-                return np.zeros_like(gray_image)
+                return np.zeros_like(image_array)
             else:
                 normalized = (normalized - p_lo) * (255 / (p_hi - p_lo))
                 normalized = np.clip(normalized, 0, 255).astype(np.uint8)
 
             return normalized
 
+        def background_subtraction(image_array: np.ndarray) -> np.ndarray:
+            k_size = self._make_odd(self.settings.edge_detection.edge_gauss_blur_kernel)
+            background = cv2.GaussianBlur(image_array, (k_size, k_size), 0)
+            subtracted = cv2.subtract(image_array, background)
+            subtracted = cv2.normalize(subtracted, None, 0, 255, cv2.NORM_MINMAX)
+
+            return subtracted
+
+        def contrast_boost(image_array: np.ndarray) -> np.ndarray:
+            # Define local variables
+            clahe_clip = self.settings.edge_detection.noise_handling.contrast_clahe_clip_limit
+            clahe_grid = self.settings.edge_detection.noise_handling.contrast_clahe_grid_size
+            tophat = self._make_odd(self.settings.edge_detection.noise_handling.contrast_top_hat_kernel)
+
+            # CLAHE (local contrast boost)
+            clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(clahe_grid, clahe_grid))
+            eq = clahe.apply(image_array)
+
+            # Top-hat emphasizes bright thin-ish features on dark background
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (tophat, tophat))
+            th = cv2.morphologyEx(eq, cv2.MORPH_TOPHAT, kernel)
+            enh = cv2.addWeighted(eq, 0.6, th, 0.8, 0)
+
+            return cv2.GaussianBlur(enh, (5, 5), 0)
+
         # Normalize image
-        self._image_normal = normalize(winsorize(self._image_mono8))
-        self.display_image = convert_color_bit(self._image_normal.copy(), color_channels=3, out_bit_depth=8)
+        image_winsor = winsorize(self._image_mono8)
+        image_normal = normalize(image_winsor)
+
+        # Background subtraction
+        image_subtracted = background_subtraction(image_normal)
+
+        # Contrast boost
+        image_contrast = contrast_boost(image_subtracted)
+
+        # End tasks
+        self._image_normal = image_contrast
+        self.display_image = convert_color_bit(image_contrast.copy(), color_channels=3, out_bit_depth=8)
 
 
 def check_path(target_path: str, overwrite: bool = True) -> str:

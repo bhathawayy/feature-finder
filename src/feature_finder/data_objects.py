@@ -8,39 +8,35 @@ from pydantic import BaseModel, ValidationError, Field
 T = TypeVar("T", bound="JSONConfig")
 
 
+# NOTE: The class variable names MUST be the same as a FeatureFinder class property (except for boolean flags).
+
 class ArchSettings(BaseModel):
-    fit_feature: bool = Field(default=False)  # Flag for fitting feature to detections
-    min_u_score: float = Field(default=0.0)  # Likeliness of being U-shaped
-    size_range: tuple[int, int] = Field(default=(0, 500000))  # Expected size of rectangular object [(pxl^2, pxl^2)]
+    arch_min_u_score: float = Field(default=0.5)  # The closer to 1, the more "perfect" the arch is
+    arch_size_range: tuple[int, int] = Field(default=(0, 500000))
+    flag_fit_feature: bool = Field(default=False)
 
 
 class CrosshairSettings(BaseModel):
-    fit_feature: bool = Field(default=False)  # Flag for fitting feature to detections
-    hough_threshold: int = Field(default=15)  # Explicit Hough line thresholding
-    max_line_gap: int = Field(default=5)  # Allowable distance between detections
-    max_slope: float = Field(default=0.0)  # Max allowed slope of crosshair
-    min_length: int = Field(default=10)  # Allowable length of Hough lines
-
-
-class EdgeSettings(BaseModel):
-    gauss_blur_kernel: int = Field(default=21)  # Gaussian blur kernel size
-    pixel_threshold: int = Field(default=150)  # Explicit edge thresholding
-    size_range: tuple[int, int] = Field(default=(100, 1000000))  # Expected size of ANY feature [(pxl^2, pxl^2)]
+    crosshair_hough_threshold: int = Field(default=15)
+    crosshair_max_line_gap: int = Field(default=5)
+    crosshair_max_slope: float = Field(default=0.0)
+    crosshair_min_length: int = Field(default=10)
+    flag_fit_feature: bool = Field(default=False)
 
 
 class EllipseSettings(BaseModel):
-    circularity_min: float = Field(default=0.6)  # The closer to 1, the more "perfect" the circle is
-    fit_feature: bool = Field(default=False)  # Flag for fitting feature to detections
-    size_range: tuple[int, int] = Field(default=(0, 500000))  # Expected size of elliptical object [(pxl^2, pxl^2)]
+    elliptical_circularity_min: float = Field(default=0.6)  # The closer to 1, the more "perfect" the circle is
+    elliptical_size_range: tuple[int, int] = Field(default=(0, 500000))
+    flag_fit_feature: bool = Field(default=False)
 
 
 class FeatureInfo(BaseModel):
-    area: float = Field(default=np.nan)  # Area of feature
-    centroid: tuple[int | float, int | float] = Field(default=(np.nan, np.nan))  # Centroid of feature
-    height: float = Field(default=np.nan)  # Height of feature
-    rotation: float = Field(default=np.nan)  # Rotation or slope of feature
+    area: float = Field(default=np.nan)
+    centroid: tuple[int | float, int | float] = Field(default=(np.nan, np.nan))
+    height: float = Field(default=np.nan)
+    rotation: float = Field(default=np.nan)
     shape_type: str = Field(default="NA")  # Options: 'rect', '[horizontal/vertical] line', 'ellipse', 'circle'
-    width: float = Field(default=np.nan)  # Width of feature
+    width: float = Field(default=np.nan)
 
 
 class JSONConfig(BaseModel):
@@ -114,18 +110,31 @@ class JSONConfig(BaseModel):
 
 
 class NoiseSettings(BaseModel):
-    lower_percentile: int = Field(default=1)  # Lower normalization cutoff as percentile
-    normalize: bool = Field(default=False)  # Flag for reducing noise by normalization
-    upper_percentile: int = Field(default=99)  # Upper normalization cutoff as percentile
-    winsor_percentile: int = Field(default=85)  # Caps very bright pixels at the specified percentile
+    contrast_clahe_clip_limit: float = Field(default=2.5)
+    contrast_clahe_grid_size: int = Field(default=8)
+    contrast_top_hat_kernel: int = Field(default=21)
+    noise_percentile_range: tuple[int, int] = Field(default=(1, 99))
+    noise_winsor_percentile: int = Field(default=85)
 
 
 class RectSettings(BaseModel):
-    fit_feature: bool = Field(default=False)  # Flag for fitting feature to detections
-    size_range: tuple[int, int] = Field(default=(0, 500000))  # Expected size of rectangular object [(pxl^2, pxl^2)]
+    flag_fit_feature: bool = Field(default=False)
+    rectangular_size_range: tuple[int, int] = Field(default=(0, 500000))
 
 
 # Level 1 Dependency ------------------------------------------------------------------------------------------------ #
+
+class EdgeSettings(BaseModel):
+    contour_size_range: tuple[int, int] = Field(default=(100, 1000000))
+    edge_canny_range: tuple[int, int] = Field(default=(0, 100))
+    edge_gauss_blur_kernel: int = Field(default=21)
+    edge_pixel_threshold: int = Field(default=150)  # Range: (0, 255)
+    flag_canny_edged: bool = Field(default=False)
+    flag_invert_image: bool = Field(default=False)
+    flag_reduce_noise: bool = Field(default=False)
+    flag_show_processed: bool = Field(default=False)
+    noise_handling: NoiseSettings = Field(default=NoiseSettings(), alias="noise_handling")
+
 
 class FeatureSettings(BaseModel):
     arch: ArchSettings = Field(default=ArchSettings(), alias="arch")
@@ -137,9 +146,8 @@ class FeatureSettings(BaseModel):
 # Level 2 Dependency ------------------------------------------------------------------------------------------------ #
 
 class DetectionSettings(JSONConfig):
-    edges: EdgeSettings = Field(default=EdgeSettings(), alias="edges")
-    features: FeatureSettings = Field(default=FeatureSettings(), alias="features")  # Container for feature settings
-    noise_handling: NoiseSettings = Field(default=NoiseSettings(), alias="noise_handling")
+    edge_detection: EdgeSettings = Field(default=EdgeSettings(), alias="edges")
+    feature_fitting: FeatureSettings = Field(default=FeatureSettings(), alias="features")
 
 
 if __name__ == "__main__":

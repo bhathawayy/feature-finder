@@ -2,14 +2,16 @@ import logging
 import math
 import os
 import sys
-import yaml
 from typing import Any
+
 import cv2
 import numpy as np
+import yaml
 from PySide6.QtCore import QRectF, Slot, QSignalBlocker
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QSizePolicy, QApplication, QWidget, QStyleFactory,
                                QFileDialog, QMessageBox, QSlider, QSpinBox, QDoubleSpinBox, QAbstractSpinBox)
+
 from feature_finder import resources
 from feature_finder.data_processing import convert_color_bit, check_path, DetectionBase
 from feature_finder.interface.ui_form import Ui_featureFinder
@@ -64,7 +66,7 @@ class FeatureFinder(QWidget):
         
         :return: None
         """
-        # Sliders
+        # Slider(s)
         for slider in self.findChildren(QSlider):
             slider_name = slider.objectName().lower()
             slider.sliderReleased.connect(self._update_image)
@@ -73,32 +75,41 @@ class FeatureFinder(QWidget):
             else:
                 slider.valueChanged.connect(self._change_slider)
 
-        # Spin boxes
+        # Spin box(es)
         for spin_box in self.findChildren(QAbstractSpinBox):
             spin_box_name = spin_box.objectName().lower()
             if ("_max" in spin_box_name or "_min" in spin_box_name) and "crosshair" not in spin_box_name:
                 spin_box.lineEdit().returnPressed.connect(self._change_range_slider_or_spin)
 
         spin_box_to_property_map = {
-            self.ui.circularity_spin: type(self).circularity_min.fget.__name__,
-            self.ui.crosshair_min_length_spin: type(self).crosshair_min_length.fget.__name__,
+            self.ui.circularity_spin: type(self).elliptical_circularity_min.fget.__name__,
+            self.ui.clahe_clip_limit_spin: type(self).contrast_clahe_clip_limit.fget.__name__,
+            self.ui.clahe_grid_size_spin: type(self).contrast_clahe_grid_size.fget.__name__,
             self.ui.crosshair_max_slope_spin: type(self).crosshair_max_slope.fget.__name__,
-            self.ui.distance_interval_spin: type(self).crosshair_distance.fget.__name__,
-            self.ui.gauss_blur_spin: type(self).gauss_blur_kernel.fget.__name__,
-            self.ui.hough_threshold_spin: type(self).crosshair_hough_threshold.fget.__name__,
-            self.ui.pixel_threshold_spin: type(self).pixel_threshold.fget.__name__
+            self.ui.crosshair_min_length_spin: type(self).crosshair_min_length.fget.__name__,
+            self.ui.crosshair_distance_spin: type(self).crosshair_max_line_gap.fget.__name__,
+            self.ui.gauss_blur_spin: type(self).edge_gauss_blur_kernel.fget.__name__,
+            self.ui.crosshair_hough_threshold_spin: type(self).crosshair_hough_threshold.fget.__name__,
+            self.ui.pixel_threshold_spin: type(self).edge_pixel_threshold.fget.__name__,
+            self.ui.top_hat_kernel_spin: type(self).contrast_top_hat_kernel.fget.__name__,
+            self.ui.arch_u_score_spin: type(self).arch_min_u_score.fget.__name__,
+            self.ui.winsor_percentile_spin: type(self).noise_winsor_percentile.fget.__name__
         }
         for spin_box in spin_box_to_property_map:
             spin_box.lineEdit().returnPressed.connect(
                 lambda sb=spin_box, attr=spin_box_to_property_map[spin_box]: self._change_spin(sb, attr))
 
-        # Buttons / Check boxes
+        # Button(s) / Check box(es)
+        self.ui.arch_fit_check.clicked.connect(self._click_enable_arch_fitting)
         self.ui.crosshair_fit_check.clicked.connect(self._click_enable_crosshair_fitting)
         self.ui.elliptical_fit_check.clicked.connect(self._click_enable_elliptical_fitting)
-        self.ui.file_path_browse_button.clicked.connect(self._click_browse_file)
-        self.ui.normalize_image_check.clicked.connect(self._click_normalize)
+        self.ui.file_path_browse_button.clicked.connect(lambda: self._click_import_file(browser=True))
         self.ui.rect_fit_check.clicked.connect(self._click_enable_rectangular_fitting)
+        self.ui.reduce_noise_check.clicked.connect(self._click_reduce_noise)
         self.ui.save_image_button.clicked.connect(self._click_save_drawing)
+
+        # Entry box(es)
+        self.ui.file_path_entry.returnPressed.connect(self._click_import_file)
 
     def _change_range_slider_or_spin(self):
         """
@@ -148,7 +159,7 @@ class FeatureFinder(QWidget):
         toggled_widget, slider, spin_box = self._get_bonded_widget()
         new_val = toggled_widget.value()
         with QSignalBlocker(spin_box):
-            if "circularity" in spin_box.objectName().lower():
+            if "circularity" in spin_box.objectName().lower() or "u_score" in spin_box.objectName().lower():
                 new_val *= 1 / 100
             spin_box.setValue(new_val)
         self._update_image()
@@ -165,7 +176,20 @@ class FeatureFinder(QWidget):
         slider = self.ui.__getattribute__(widget_name.replace("_spin", "_slider"))
         slider.setValue(int(getattr(self, attribute_name)))
 
-    def _click_browse_file(self):
+    def _check_for_setting_dif(self, prop: property, settings_handle) -> bool:
+        """
+        Check for difference in settings
+        """
+        property_name = prop.fget.__name__
+        property_value = prop.fget(self)
+
+        if property_value != settings_handle.__getattribute__(property_name):
+            settings_handle.__setattr__(property_name, property_value)
+            return True
+        else:
+            return False
+
+    def _click_import_file(self, browser: bool = False):
         """
         Open a file dialog to browse and select an image file.
 
@@ -198,44 +222,68 @@ class FeatureFinder(QWidget):
 
             return rgb_image
 
-        # Setup file browser dialog box
-        file_dialog = QFileDialog(self)
-        file_dialog.setWindowTitle("Open File")
-        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
+        if browser:
+            # Set up the file browser dialog box
+            file_dialog = QFileDialog(self)
+            file_dialog.setWindowTitle("Open File")
+            file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+            file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
 
-        if file_dialog.exec():
-            selected_file = file_dialog.selectedFiles()[0]
-            image_array = import_image(selected_file)
-
-            if image_array.size > 0:
-
-                # Store the image array
-                self._raw_image = image_array
-                self.drawn_image = convert_color_bit(image_array, color_channels=3, out_bit_depth=8)
+            # Execute the file browser dialog box
+            if file_dialog.exec():
+                selected_file = file_dialog.selectedFiles()[0]
+                image_array = import_image(selected_file)
 
                 # Update UI
-                self.ui.edge_detection_frame.setEnabled(True)
-                self.ui.feature_fitting_frame.setEnabled(True)
                 self.ui.file_path_entry.setText(selected_file)
-                self.ui.fitting_tabs.setEnabled(True)
-                self.ui.noise_handling_frame.setEnabled(True)
-                self.ui.save_image_button.setEnabled(True)
+            else:
+                image_array = np.array([])
+        else:
+            image_array = import_image(self.ui.file_path_entry.text())
 
-                # Import detector object
-                self.detector = DetectionBase(self._raw_image)
+        if image_array.size > 0:
 
-                # Update the stream window to show imported image
-                self._update_image()
+            # Store the image array
+            self._raw_image = image_array
+            self.drawn_image = convert_color_bit(image_array, color_channels=3, out_bit_depth=8)
 
-    def _click_enable_elliptical_fitting(self):
+            # Update UI
+            self.ui.classic_tab.setEnabled(True)
+            self.ui.edge_detection_frame.setEnabled(True)
+            self.ui.feature_fitting_frame.setEnabled(True)
+            self.ui.edge_detection_tabs.setEnabled(True)
+            self.ui.save_image_button.setEnabled(True)
+
+            self.ui.arch_tab.setEnabled(self.ui.arch_fit_check.isChecked())
+            self.ui.canny_tab.setEnabled(self.ui.canny_edge_check.isChecked())
+            self.ui.crosshair_tab.setEnabled(self.ui.crosshair_fit_check.isChecked())
+            self.ui.elliptical_tab.setEnabled(self.ui.elliptical_fit_check.isChecked())
+            self.ui.noise_contrast_tab.setEnabled(self.ui.reduce_noise_check.isChecked())
+            self.ui.noise_normalize_tab.setEnabled(self.ui.reduce_noise_check.isChecked())
+            self.ui.rect_tab.setEnabled(self.ui.rect_fit_check.isChecked())
+
+            if self.ui.arch_fit_check.isChecked(): self._click_enable_arch_fitting()
+            if self.ui.canny_edge_check.isChecked(): self._click_canny_edge()
+            if self.ui.crosshair_fit_check.isChecked(): self._click_enable_crosshair_fitting()
+            if self.ui.elliptical_fit_check.isChecked(): self._click_enable_elliptical_fitting()
+            if self.ui.invert_image_check.isChecked(): self._update_image()
+            if self.ui.rect_fit_check.isChecked(): self._click_enable_rectangular_fitting()
+            if self.ui.reduce_noise_check.isChecked(): self._click_reduce_noise()
+            if self.ui.show_processed_image_check.isChecked(): self._update_image()
+
+            # Import detector object
+            self.detector = DetectionBase(self._raw_image)
+
+            # Update the stream window to show imported image
+            self._update_image()
+
+    def _click_enable_arch_fitting(self):
         """
         Enable controls if fitting is enabled.
 
         :return: None
         """
-        self.ui.elliptical_tab.setEnabled(self.ui.elliptical_fit_check.isChecked())
-        self.detector.settings.features.ellipse.fit_feature = self.ui.elliptical_fit_check.isChecked()
+        self.ui.arch_tab.setEnabled(self.ui.arch_fit_check.isChecked())
         self._update_image()
 
     def _click_enable_crosshair_fitting(self):
@@ -245,7 +293,15 @@ class FeatureFinder(QWidget):
         :return: None
         """
         self.ui.crosshair_tab.setEnabled(self.ui.crosshair_fit_check.isChecked())
-        self.detector.settings.features.crosshair.fit_feature = self.ui.crosshair_fit_check.isChecked()
+        self._update_image()
+
+    def _click_enable_elliptical_fitting(self):
+        """
+        Enable controls if fitting is enabled.
+
+        :return: None
+        """
+        self.ui.elliptical_tab.setEnabled(self.ui.elliptical_fit_check.isChecked())
         self._update_image()
 
     def _click_enable_rectangular_fitting(self):
@@ -255,18 +311,25 @@ class FeatureFinder(QWidget):
         :return: None
         """
         self.ui.rect_tab.setEnabled(self.ui.rect_fit_check.isChecked())
-        self.detector.settings.features.rectangle.fit_feature = self.ui.rect_fit_check.isChecked()
         self._update_image()
 
-    def _click_normalize(self):
+    def _click_reduce_noise(self):
         """
         Enable controls if noise handling is enabled.
 
         :return: None
         """
-        self.ui.noise_handling_tabs.setEnabled(self.ui.normalize_image_check.isChecked())
-        self.detector.settings.noise_handling.normalize = self.ui.normalize_image_check.isChecked()
-        self.ui.noise_handling_tabs.setEnabled(self.ui.normalize_image_check.isChecked())
+        self.ui.noise_normalize_tab.setEnabled(self.ui.reduce_noise_check.isChecked())
+        self.ui.noise_contrast_tab.setEnabled(self.ui.reduce_noise_check.isChecked())
+        self._update_image()
+
+    def _click_canny_edge(self):
+        """
+        Enable controls if Canny edging is enabled.
+
+        :return: None
+        """
+        self.ui.canny_tab.setEnabled(self.ui.reduce_noise_check.isChecked())
         self._update_image()
 
     def _click_save_drawing(self):
@@ -293,13 +356,13 @@ class FeatureFinder(QWidget):
                     os.makedirs(checked_dir)
                 cv2.imwrite(checked_path, self.drawn_image)
 
-            except PermissionError: # handle permissions erro case
+            except PermissionError:  # handle permissions erro case
                 checked_dir = os.getcwd()
                 file_path = os.path.join(os.getcwd(), os.path.basename(file_path))
                 self._logger.warning(f"Lacking write permissions for this directory. Saving locally instead.")
                 cv2.imwrite(file_path, self.drawn_image)
 
-            finally: # log
+            finally:  # log
                 self._logger.info(f"Image saved at: {file_path}")
 
             # Save JSON settings file
@@ -417,35 +480,51 @@ class FeatureFinder(QWidget):
                 set_value(get_target_name(widget_family_member.objectName(), "spin", "slider"), setting_handle)
 
         # Define local variables
-        edge_settings = self.detector.settings.edges
-        feature_settings = self.detector.settings.features
-        noise_settings = self.detector.settings.noise_handling
+        edge_settings = self.detector.settings.edge_detection
+        feature_settings = self.detector.settings.feature_fitting
+        noise_settings = self.detector.settings.edge_detection.noise_handling
 
-        # Set sliders
-        set_widget_value(self.ui.circularity_spin, feature_settings.ellipse.circularity_min, float_slider_factor=100)
-        set_widget_value(self.ui.crosshair_max_slope_spin, feature_settings.crosshair.max_slope)
-        set_widget_value(self.ui.crosshair_min_length_spin, feature_settings.crosshair.min_length)
-        set_widget_value(self.ui.distance_interval_slider, feature_settings.crosshair.max_line_gap)
-        set_widget_value(self.ui.elliptical_max_size_slider, feature_settings.ellipse.size_range)
-        set_widget_value(self.ui.feature_max_size_slider, edge_settings.size_range)
-        set_widget_value(self.ui.gauss_blur_slider, edge_settings.gauss_blur_kernel)
-        set_widget_value(self.ui.hough_threshold_spin, feature_settings.crosshair.hough_threshold)
-        set_widget_value(self.ui.noise_percentile_max_slider, noise_settings.upper_percentile)
-        set_widget_value(self.ui.noise_percentile_min_slider, noise_settings.lower_percentile)
-        set_widget_value(self.ui.pixel_threshold_slider, edge_settings.pixel_threshold)
-        set_widget_value(self.ui.rect_max_size_slider, feature_settings.rectangle.size_range)
-        set_widget_value(self.ui.winsor_percentile_slider, noise_settings.winsor_percentile)
+        # Set sliders ----------------------------------------------------------------------------------------------- #
 
-        # Set check boxes
-        self.ui.crosshair_fit_check.setChecked(feature_settings.crosshair.fit_feature)
-        self.ui.elliptical_fit_check.setChecked(feature_settings.ellipse.fit_feature)
-        self.ui.normalize_image_check.setChecked(noise_settings.normalize)
-        self.ui.rect_fit_check.setChecked(feature_settings.rectangle.fit_feature)
+        ## Feature fitting sliders
+        set_widget_value(self.ui.arch_max_size_slider, feature_settings.arch.arch_size_range)
+        set_widget_value(self.ui.arch_u_score_slider, feature_settings.arch.arch_min_u_score)
+        set_widget_value(self.ui.circularity_spin, feature_settings.ellipse.elliptical_circularity_min,
+                         float_slider_factor=100)
+        set_widget_value(self.ui.crosshair_distance_slider, feature_settings.crosshair.crosshair_max_line_gap)
+        set_widget_value(self.ui.crosshair_hough_threshold_spin, feature_settings.crosshair.crosshair_hough_threshold)
+        set_widget_value(self.ui.crosshair_max_slope_spin, feature_settings.crosshair.crosshair_max_slope)
+        set_widget_value(self.ui.crosshair_min_length_spin, feature_settings.crosshair.crosshair_min_length)
+        set_widget_value(self.ui.elliptical_max_size_slider, feature_settings.ellipse.elliptical_size_range)
+        set_widget_value(self.ui.rect_max_size_slider, feature_settings.rectangle.rectangular_size_range)
 
-        if self.ui.crosshair_fit_check.isChecked(): self._click_enable_crosshair_fitting()
-        if self.ui.elliptical_fit_check.isChecked(): self._click_enable_elliptical_fitting()
-        if self.ui.rect_fit_check.isChecked(): self._click_enable_rectangular_fitting()
-        if self.ui.normalize_image_check.isChecked(): self._click_normalize()
+        ## Classic detection sliders
+        set_widget_value(self.ui.feature_max_size_slider, edge_settings.contour_size_range)
+        set_widget_value(self.ui.gauss_blur_slider, edge_settings.edge_gauss_blur_kernel)
+        set_widget_value(self.ui.pixel_threshold_slider, edge_settings.edge_pixel_threshold)
+
+        ## Other detection sliders
+        set_widget_value(self.ui.canny_max_slider, edge_settings.edge_canny_range)
+        set_widget_value(self.ui.clahe_clip_limit_slider, noise_settings.contrast_clahe_clip_limit,
+                         float_slider_factor=100)
+        set_widget_value(self.ui.clahe_grid_size_slider, noise_settings.contrast_clahe_grid_size)
+        set_widget_value(self.ui.noise_percentile_max_slider, noise_settings.noise_percentile_range)
+        set_widget_value(self.ui.top_hat_kernel_slider, noise_settings.contrast_top_hat_kernel)
+        set_widget_value(self.ui.winsor_percentile_slider, noise_settings.noise_winsor_percentile)
+
+        # Set check boxes ------------------------------------------------------------------------------------------- #
+
+        ## Feature fitting check boxes
+        self.ui.arch_fit_check.setChecked(feature_settings.rectangle.flag_fit_feature)
+        self.ui.crosshair_fit_check.setChecked(feature_settings.crosshair.flag_fit_feature)
+        self.ui.elliptical_fit_check.setChecked(feature_settings.ellipse.flag_fit_feature)
+        self.ui.rect_fit_check.setChecked(feature_settings.rectangle.flag_fit_feature)
+
+        ## Edge detection check boxes
+        self.ui.canny_edge_check.setChecked(edge_settings.flag_canny_edged)
+        self.ui.invert_image_check.setChecked(edge_settings.flag_invert_image)
+        self.ui.reduce_noise_check.setChecked(edge_settings.flag_reduce_noise)
+        self.ui.show_processed_image_check.setChecked(edge_settings.flag_show_processed)
 
     def _startup(self):
         """
@@ -463,29 +542,57 @@ class FeatureFinder(QWidget):
         self._attach_functions_to_widgets()
 
     def _update_referenced_settings(self):
+
         """
         Update the internally tracked settings based on UI.
 
         :return: None
         """
-        self.detector.settings.edges.size_range = self.feature_size_range
-        self.detector.settings.edges.pixel_threshold = self.pixel_threshold
-        self.detector.settings.edges.gauss_blur_kernel = self.gauss_blur_kernel
+        # Edge detection settings ----------------------------------------------------------------------------------- #
 
-        self.detector.settings.features.crosshair.fit_feature = self.ui.crosshair_fit_check.isChecked()
-        self.detector.settings.features.crosshair.hough_threshold = self.crosshair_hough_threshold
-        self.detector.settings.features.crosshair.max_line_gap = self.crosshair_distance
-        self.detector.settings.features.crosshair.max_slope = self.crosshair_max_slope
-        self.detector.settings.features.crosshair.min_length = self.crosshair_min_length
+        ## Classic
+        self.detector.settings.edge_detection.flag_invert_image = self.ui.invert_image_check.isChecked()
+        self.detector.settings.edge_detection.flag_show_processed = self.ui.show_processed_image_check.isChecked()
+        # self.detector.settings.edge_detection.gauss_blur_kernel = self.gauss_blur_kernel
+        # self.detector.settings.edge_detection.pixel_threshold = self.pixel_threshold
+        # self.detector.settings.edge_detection.size_range = self.feature_size_range
 
-        self.detector.settings.features.ellipse.circularity_min = self.circularity_min
-        self.detector.settings.features.ellipse.fit_feature = self.ui.elliptical_fit_check.isChecked()
-        self.detector.settings.features.ellipse.size_range = self.elliptical_size_range
+        ## Canny edge
+        # self.detector.settings.edge_detection.canny_edge_range = self.canny_edge_range
+        self.detector.settings.edge_detection.flag_canny_edged = self.ui.canny_edge_check.isChecked()
 
-        self.detector.settings.features.rectangle.fit_feature = self.ui.rect_fit_check.isChecked()
-        self.detector.settings.features.rectangle.size_range = self.rectangular_size_range
+        ## Noise: Normalization
+        self.detector.settings.edge_detection.flag_reduce_noise = self.ui.reduce_noise_check.isChecked()
+        # self.detector.settings.edge_detection.noise_handling.percentile_range = self.noise_percentile_range
+        # self.detector.settings.edge_detection.noise_handling.winsor_percentile = self.winsor_percentile
 
-        self.detector.settings.noise_handling.normalize = self.ui.normalize_image_check.isChecked()
+        ## Noise: Contrast boost
+        # self.detector.settings.edge_detection.noise_handling.tophat_ksize = self.contrast_top_hat_kernel
+        # self.detector.settings.edge_detection.noise_handling.clahe_grid_size = self.contrast_clahe_grid_size
+        # self.detector.settings.edge_detection.noise_handling.clahe_clip = self.contrast_clahe_clip_limit
+
+        # Feature fitting settings ---------------------------------------------------------------------------------- #
+
+        ## Crosshair
+        self.detector.settings.feature_fitting.crosshair.flag_fit_feature = self.ui.crosshair_fit_check.isChecked()
+        # self.detector.settings.feature_fitting.crosshair.hough_threshold = self.crosshair_hough_threshold
+        # self.detector.settings.feature_fitting.crosshair.max_line_gap = self.crosshair_distance
+        # self.detector.settings.feature_fitting.crosshair.max_slope = self.crosshair_max_slope
+        # self.detector.settings.feature_fitting.crosshair.min_length = self.crosshair_min_length
+
+        ## Elliptical
+        # self.detector.settings.feature_fitting.ellipse.circularity_min = self.circularity_min
+        self.detector.settings.feature_fitting.ellipse.flag_fit_feature = self.ui.elliptical_fit_check.isChecked()
+        # self.detector.settings.feature_fitting.ellipse.size_range = self.elliptical_size_range
+
+        ## Rectangular
+        self.detector.settings.feature_fitting.rectangle.flag_fit_feature = self.ui.rect_fit_check.isChecked()
+        # self.detector.settings.feature_fitting.rectangle.size_range = self.rectangular_size_range
+
+        ## Arched
+        self.detector.settings.feature_fitting.arch.flag_fit_feature = self.ui.arch_fit_check.isChecked()
+        # self.detector.settings.feature_fitting.arch.min_u_score = self.arch_u_score
+        # self.detector.settings.feature_fitting.rectangle.size_range = self.arch_size_range
 
     def _update_image(self):
         """
@@ -494,33 +601,33 @@ class FeatureFinder(QWidget):
         :return: None
         """
 
-        def check_for_dif(property_value: Any, settings_handle, attribute_to_change: str) -> bool:
-            if property_value != settings_handle.__getattribute__(attribute_to_change):
-                settings_handle.__setattr__(attribute_to_change, property_value)
-                return True
-            else:
-                return False
-
         if self._raw_image.size > 0:
 
+            # Define local variables
+            edge_settings = self.detector.settings.edge_detection
+            noise_settings = self.detector.settings.edge_detection.noise_handling
+
             # Determine preprocessing
-            edge_settings = self.detector.settings.edges
-            if self.ui.normalize_image_check.isChecked():
-                noise_settings = self.detector.settings.noise_handling
-                update1 = check_for_dif(self.upper_noise_percentile, noise_settings, "upper_percentile")
-                update2 = check_for_dif(self.lower_noise_percentile, noise_settings, "lower_percentile")
-                update3 = check_for_dif(self.winsor_percentile, noise_settings, "winsor_percentile")
-                update_noise = any([update1, update2, update3])
+            if self.ui.reduce_noise_check.isChecked():
+                update1 = self._check_for_setting_dif(type(self).noise_percentile_range, noise_settings)
+                update2 = self._check_for_setting_dif(type(self).noise_winsor_percentile, noise_settings)
+                update3 = self._check_for_setting_dif(type(self).contrast_top_hat_kernel, noise_settings)
+                update4 = self._check_for_setting_dif(type(self).contrast_clahe_grid_size, noise_settings)
+                update5 = self._check_for_setting_dif(type(self).contrast_clahe_clip_limit, noise_settings)
+                update_noise = any([update1, update2, update3, update4, update5,
+                                    edge_settings.flag_reduce_noise != True])
             else:
                 update_noise = False
-            update_gauss = check_for_dif(self.gauss_blur_kernel, edge_settings, "gauss_blur_kernel") or update_noise
-            update_threshold = check_for_dif(self.pixel_threshold, edge_settings, "pixel_threshold") or update_gauss
-
+            if self.ui.invert_image_check.isChecked() != edge_settings.flag_invert_image and not update_noise:
+                update_noise = True
+            update_gauss = self._check_for_setting_dif(type(self).edge_gauss_blur_kernel, edge_settings) or update_noise
+            update_threshold = self._check_for_setting_dif(type(self).edge_pixel_threshold,
+                                                           edge_settings) or update_gauss
             if self.ui.crosshair_fit_check.isChecked():
-                crosshair_settings = self.detector.settings.features.crosshair
-                update1 = check_for_dif(self.crosshair_hough_threshold, crosshair_settings, "hough_threshold")
-                update2 = check_for_dif(self.crosshair_min_length, crosshair_settings, "min_length")
-                update3 = check_for_dif(self.crosshair_distance, crosshair_settings, "max_line_gap")
+                crosshair_settings = self.detector.settings.feature_fitting.crosshair
+                update1 = self._check_for_setting_dif(type(self).crosshair_hough_threshold, crosshair_settings)
+                update2 = self._check_for_setting_dif(type(self).crosshair_min_length, crosshair_settings)
+                update3 = self._check_for_setting_dif(type(self).crosshair_max_line_gap, crosshair_settings)
                 update_hough = update_threshold or any([update1, update2, update3])
             else:
                 update_hough = False
@@ -550,13 +657,58 @@ class FeatureFinder(QWidget):
             self._display.on_image_received(q_image)
 
     @property
-    def circularity_min(self) -> float:
+    def arch_size_range(self) -> tuple[int, int]:
         """
-        Selected circularity limit for blob detection.
+        Selected range of detected arch sizes.
 
-        :return: Circularity limit.
+        :return: Arch size range.
         """
-        return float(self.ui.circularity_spin.value())
+        return int(self.ui.arch_min_size_spin.value()), int(self.ui.arch_max_size_spin.value())
+
+    @property
+    def arch_min_u_score(self) -> float:
+        """
+        Selected U-score (archness) minimum for blob detection.
+
+        :return: U-score minimum.
+        """
+        return float(self.ui.arch_u_score_spin.value())
+
+    @property
+    def contour_size_range(self) -> tuple[int, int]:
+        """
+        Selected range of detected contour (rectangles or crosshairs) sizes.
+
+        :return: Contour size range.
+        """
+        return int(self.ui.feature_min_size_spin.value()), int(self.ui.feature_max_size_spin.value())
+
+    @property
+    def contrast_clahe_grid_size(self) -> int:
+        """
+        Selected CLAHE kernel/grid size.
+
+        :return: CLAHE kernel/grid size.
+        """
+        return int(self.ui.clahe_grid_size_spin.value())
+
+    @property
+    def contrast_clahe_clip_limit(self) -> float:
+        """
+        Selected CLAHE clip limit.
+
+        :return: CLAHE clip limit.
+        """
+        return float(self.ui.clahe_clip_limit_spin.value())
+
+    @property
+    def contrast_top_hat_kernel(self) -> int:
+        """
+        Selected top hat kernel for small features.
+
+        :return: Top hat kernel.
+        """
+        return int(self.ui.top_hat_kernel_spin.value())
 
     @property
     def crosshair_hough_threshold(self) -> int:
@@ -565,7 +717,7 @@ class FeatureFinder(QWidget):
 
         :return: Threshold value.
         """
-        return int(self.ui.hough_threshold_spin.value())
+        return int(self.ui.crosshair_hough_threshold_spin.value())
 
     @property
     def crosshair_min_length(self) -> int:
@@ -586,34 +738,25 @@ class FeatureFinder(QWidget):
         return float(self.ui.crosshair_max_slope_spin.value())
 
     @property
-    def crosshair_distance(self) -> int:
+    def crosshair_max_line_gap(self) -> int:
         """
         Selected separation distance between crosshairs.
 
         :return: Distance between crosshairs.
         """
-        return int(self.ui.distance_interval_spin.value())
+        return int(self.ui.crosshair_distance_spin.value())
 
     @property
-    def elliptical_size_range(self) -> tuple[int, int]:
+    def edge_canny_range(self) -> tuple[int, int]:
         """
-        Selected range of detected elliptical sizes.
+        Selected range of Canny edge limits.
 
-        :return: elliptical size range.
+        :return: Canny edge limits.
         """
-        return self.ui.elliptical_min_size_slider.value(), self.ui.elliptical_max_size_slider.value()
-
-    @property
-    def feature_size_range(self) -> tuple[int, int]:
-        """
-        Selected range of detected contour (rectangles or crosshairs) sizes.
-
-        :return: contour size range.
-        """
-        return self.ui.feature_min_size_slider.value(), self.ui.feature_max_size_slider.value()
+        return int(self.ui.canny_min_spin.value()), int(self.ui.canny_max_spin.value())
 
     @property
-    def gauss_blur_kernel(self) -> int:
+    def edge_gauss_blur_kernel(self) -> int:
         """
         Selected gaussian blur kernel size.
 
@@ -631,22 +774,49 @@ class FeatureFinder(QWidget):
         return val
 
     @property
-    def lower_noise_percentile(self) -> int:
-        """
-        Selected lower noise percentile value.
-
-        :return: Lower noise percentile value.
-        """
-        return int(self.ui.noise_percentile_min_spin.value())
-
-    @property
-    def pixel_threshold(self) -> int:
+    def edge_pixel_threshold(self) -> int:
         """
         Selected pixel threshold value.
 
         :return: Threshold value.
         """
         return int(self.ui.pixel_threshold_spin.value())
+
+    @property
+    def elliptical_circularity_min(self) -> float:
+        """
+        Selected circularity minimum for blob detection.
+
+        :return: Circularity minimum.
+        """
+        return float(self.ui.circularity_spin.value())
+
+    @property
+    def elliptical_size_range(self) -> tuple[int, int]:
+        """
+        Selected range of detected elliptical sizes.
+
+        :return: Elliptical size range.
+        """
+        return int(self.ui.elliptical_min_size_spin.value()), int(self.ui.elliptical_max_size_spin.value())
+
+    @property
+    def noise_percentile_range(self) -> tuple[int, int]:
+        """
+        Selected range of noise percentiles.
+
+        :return: Noise percentile range.
+        """
+        return int(self.ui.noise_percentile_min_spin.value()), int(self.ui.noise_percentile_max_spin.value())
+
+    @property
+    def noise_winsor_percentile(self) -> int:
+        """
+        Selected winsor percentile value.
+
+        :return: Winsor percentile value.
+        """
+        return int(self.ui.winsor_percentile_spin.value())
 
     @property
     def range_slider_max(self) -> int:
@@ -664,29 +834,11 @@ class FeatureFinder(QWidget):
     @property
     def rectangular_size_range(self) -> tuple[int, int]:
         """
-        Selected range of detected elliptical sizes.
+        Selected range of detected rectangular sizes.
 
-        :return: elliptical size range.
+        :return: Rectangular size range.
         """
-        return self.ui.rect_min_size_slider.value(), self.ui.rect_max_size_slider.value()
-
-    @property
-    def upper_noise_percentile(self) -> int:
-        """
-        Selected upper noise percentile value.
-
-        :return: Upper noise percentile value.
-        """
-        return int(self.ui.noise_percentile_max_spin.value())
-
-    @property
-    def winsor_percentile(self) -> int:
-        """
-        Selected winsor percentile value.
-
-        :return: Winsor percentile value.
-        """
-        return int(self.ui.winsor_percentile_spin.value())
+        return int(self.ui.rect_min_size_spin.value()), int(self.ui.rect_max_size_spin.value())
 
 
 class Display(QGraphicsView):
